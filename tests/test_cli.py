@@ -215,6 +215,48 @@ class TestSubdomainsCommand:
         assert "no reachable" in result.output.lower() or "0" in result.output
 
 
+class TestMonitorCommand:
+    def test_no_urls_error(self):
+        result = runner.invoke(main, ["monitor"])
+        assert result.exit_code != 0
+
+
+class TestHistoryCommand:
+    def test_no_snapshots(self):
+        result = runner.invoke(main, ["history", "https://no-snapshots-here.com"])
+        assert result.exit_code == 0
+        assert "no snapshots" in result.output.lower()
+
+
+class TestNonceCheckCommand:
+    def test_unreachable(self):
+        result = runner.invoke(main, [
+            "nonce-check", "https://this-does-not-exist-99999.com",
+            "--requests", "2",
+        ])
+        assert result.exit_code == 0
+
+
+class TestHeaderInjectCommand:
+    def test_unreachable(self):
+        result = runner.invoke(main, [
+            "header-inject", "https://this-does-not-exist-99999.com",
+        ])
+        assert result.exit_code == 0
+
+
+class TestReportUriCommand:
+    def test_no_report_uri(self):
+        result = runner.invoke(main, ["report-uri", "script-src 'self'"])
+        assert result.exit_code == 0
+        assert "no report-uri" in result.output.lower()
+
+    def test_with_report_to(self):
+        result = runner.invoke(main, ["report-uri", "script-src 'self'; report-to csp-endpoint"])
+        assert result.exit_code == 0
+        assert "csp-endpoint" in result.output
+
+
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(main, ["--version"])

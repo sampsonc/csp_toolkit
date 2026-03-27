@@ -24,11 +24,31 @@
   "www.googleapis.com": [
     {"path": "/customsearch/v1?callback=CALLBACK", "notes": "Google Custom Search API"}
   ],
-  "subdomain.googleapis.com": [
-    {"path": "/various?callback=CALLBACK", "notes": "Multiple googleapis subdomains serve JSONP"}
+  "content.googleapis.com": [
+    {"path": "/discovery/v1/apis?callback=CALLBACK", "notes": "Google API Discovery JSONP"}
+  ],
+  "clients6.google.com": [
+    {"path": "/complete/search?client=chrome&q=test&callback=CALLBACK", "notes": "Google autocomplete alternate"}
+  ],
+  "www.google-analytics.com": [
+    {"path": "/analytics.js", "notes": "Google Analytics script — controllable via ga() calls"}
+  ],
+  "apis.google.com": [
+    {"path": "/js/platform.js?onload=CALLBACK", "notes": "Google Platform JS with onload callback"}
+  ],
+  "books.google.com": [
+    {"path": "/books?jscmd=viewapi&bibkeys=ISBN:1234&callback=CALLBACK", "notes": "Google Books API JSONP"}
   ],
   "graph.facebook.com": [
-    {"path": "/me?callback=CALLBACK", "notes": "Facebook Graph API JSONP (requires token)"}
+    {"path": "/me?callback=CALLBACK", "notes": "Facebook Graph API JSONP (requires token)"},
+    {"path": "/v18.0/me?callback=CALLBACK", "notes": "Facebook Graph API versioned JSONP"}
+  ],
+  "www.facebook.com": [
+    {"path": "/plugins/like.php?href=http://example.com&callback=CALLBACK", "notes": "Facebook Like plugin JSONP"}
+  ],
+  "connect.facebook.net": [
+    {"path": "/en_US/sdk.js", "notes": "Facebook SDK — potential gadget for SDK callback abuse"},
+    {"path": "/en_US/all.js", "notes": "Facebook legacy SDK"}
   ],
   "cdn.syndication.twimg.com": [
     {"path": "/timeline/profile?callback=CALLBACK&screen_name=twitter", "notes": "Twitter syndication JSONP"}
@@ -38,6 +58,9 @@
   ],
   "platform.twitter.com": [
     {"path": "/widgets.js", "notes": "Twitter widgets — hosts controllable JS"}
+  ],
+  "publish.twitter.com": [
+    {"path": "/oembed?url=https://twitter.com/jack/status/20&callback=CALLBACK", "notes": "Twitter oEmbed JSONP"}
   ],
   "search.yahoo.com": [
     {"path": "/sugg/gossip/gossip-us-ura/?output=sd1&appid=search&nresults=5&command=test&callback=CALLBACK", "notes": "Yahoo search suggestions JSONP"}
@@ -63,20 +86,20 @@
   "api.instagram.com": [
     {"path": "/oembed?url=https://instagram.com/p/xxx&callback=CALLBACK", "notes": "Instagram oEmbed JSONP (may require auth)"}
   ],
-  "connect.facebook.net": [
-    {"path": "/en_US/sdk.js", "notes": "Facebook SDK — potential gadget for SDK callback abuse"}
-  ],
   "widgets.pinterest.com": [
     {"path": "/v1/urls/count.json?url=http://example.com&callback=CALLBACK", "notes": "Pinterest count JSONP"}
+  ],
+  "tiles.pinterest.com": [
+    {"path": "/v3/pidgets/boards/pins/?callback=CALLBACK", "notes": "Pinterest tiles JSONP"}
+  ],
+  "api.pinterest.com": [
+    {"path": "/v1/urls/count.json?url=http://example.com&callback=CALLBACK", "notes": "Pinterest API count"}
   ],
   "api.github.com": [
     {"path": "/?callback=CALLBACK", "notes": "GitHub API JSONP support"}
   ],
   "noembed.com": [
     {"path": "/embed?url=http://youtube.com/watch?v=xxx&callback=CALLBACK", "notes": "NoEmbed oEmbed proxy JSONP"}
-  ],
-  "tiles.pinterest.com": [
-    {"path": "/v3/pidgets/boards/pins/?callback=CALLBACK", "notes": "Pinterest tiles JSONP"}
   ],
   "en.wikipedia.org": [
     {"path": "/w/api.php?action=opensearch&format=json&callback=CALLBACK&search=test", "notes": "Wikipedia API JSONP"}
@@ -89,5 +112,92 @@
   ],
   "api.openstreetmap.org": [
     {"path": "/api/0.6/notes/search.json?q=test&callback=CALLBACK", "notes": "OpenStreetMap notes JSONP"}
+  ],
+  "www.tumblr.com": [
+    {"path": "/svc/post/share?url=http://example.com&callback=CALLBACK", "notes": "Tumblr share endpoint JSONP"}
+  ],
+  "api.tumblr.com": [
+    {"path": "/v2/blog/test.tumblr.com/info?callback=CALLBACK", "notes": "Tumblr API JSONP"}
+  ],
+  "embed.spotify.com": [
+    {"path": "/oembed?url=https://open.spotify.com/track/xxx&callback=CALLBACK", "notes": "Spotify oEmbed JSONP"}
+  ],
+  "open.spotify.com": [
+    {"path": "/oembed?url=https://open.spotify.com/track/xxx&callback=CALLBACK", "notes": "Spotify oEmbed JSONP"}
+  ],
+  "api.vimeo.com": [
+    {"path": "/api/oembed.json?url=https://vimeo.com/1&callback=CALLBACK", "notes": "Vimeo oEmbed JSONP"}
+  ],
+  "vimeo.com": [
+    {"path": "/api/oembed.json?url=https://vimeo.com/1&callback=CALLBACK", "notes": "Vimeo oEmbed JSONP"}
+  ],
+  "www.slideshare.net": [
+    {"path": "/api/oembed/2?url=https://www.slideshare.net/test&format=jsonp&callback=CALLBACK", "notes": "SlideShare oEmbed JSONP"}
+  ],
+  "api.soundcloud.com": [
+    {"path": "/oembed?url=https://soundcloud.com/test&format=js&callback=CALLBACK", "notes": "SoundCloud oEmbed JSONP"}
+  ],
+  "api.dailymotion.com": [
+    {"path": "/video/x1234?fields=id,title&callback=CALLBACK", "notes": "Dailymotion API JSONP"}
+  ],
+  "player.vimeo.com": [
+    {"path": "/video/1?callback=CALLBACK", "notes": "Vimeo player API callback"}
+  ],
+  "www.reddit.com": [
+    {"path": "/buttons/button1.html?url=http://example.com&jsonp=CALLBACK", "notes": "Reddit share button JSONP"}
+  ],
+  "buttons.reddit.com": [
+    {"path": "/button_info.html?url=http://example.com&callback=CALLBACK", "notes": "Reddit buttons JSONP"}
+  ],
+  "api.wordpress.com": [
+    {"path": "/oembed/?url=https://wordpress.com/test&for=wpcom&callback=CALLBACK", "notes": "WordPress.com oEmbed JSONP"}
+  ],
+  "public-api.wordpress.com": [
+    {"path": "/oembed/?url=https://wordpress.com/test&for=wpcom&callback=CALLBACK", "notes": "WordPress public API oEmbed JSONP"}
+  ],
+  "stats.wp.com": [
+    {"path": "/e-latest.js", "notes": "WordPress stats JS — potential callback abuse"}
+  ],
+  "maps.google.com": [
+    {"path": "/maps/api/js?callback=CALLBACK", "notes": "Google Maps (alternate domain)"}
+  ],
+  "oembed.com": [
+    {"path": "/providers.json?callback=CALLBACK", "notes": "oEmbed provider registry JSONP"}
+  ],
+  "api.bing.com": [
+    {"path": "/osjson.aspx?query=test&jsonp=CALLBACK", "notes": "Bing search suggestions JSONP"}
+  ],
+  "www.bing.com": [
+    {"path": "/AS/Suggestions?qry=test&cb=CALLBACK", "notes": "Bing autocomplete suggestions"}
+  ],
+  "suggestqueries.google.com": [
+    {"path": "/complete/search?client=firefox&q=test&callback=CALLBACK", "notes": "Google suggest queries JSONP"}
+  ],
+  "photon.komoot.io": [
+    {"path": "/api/?q=berlin&callback=CALLBACK", "notes": "Komoot Photon geocoder JSONP"}
+  ],
+  "api.mixpanel.com": [
+    {"path": "/track/?data=e30%3D&callback=CALLBACK", "notes": "Mixpanel tracking JSONP"}
+  ],
+  "cdn.segment.com": [
+    {"path": "/analytics.js/v1/key/analytics.min.js", "notes": "Segment analytics — controllable via identify/track calls"}
+  ],
+  "static.hotjar.com": [
+    {"path": "/c/hotjar-xxx.js?sv=6", "notes": "Hotjar script — hosts controllable session recording JS"}
+  ],
+  "js.stripe.com": [
+    {"path": "/v3/", "notes": "Stripe.js — payment injection risk if attacker controls Stripe key"}
+  ],
+  "challenges.cloudflare.com": [
+    {"path": "/turnstile/v0/api.js?onload=CALLBACK", "notes": "Cloudflare Turnstile onload callback"}
+  ],
+  "www.recaptcha.net": [
+    {"path": "/recaptcha/api.js?onload=CALLBACK", "notes": "reCAPTCHA onload callback"}
+  ],
+  "www.gstatic.com": [
+    {"path": "/recaptcha/releases/xxx/recaptcha__en.js", "notes": "reCAPTCHA JS — controlled via grecaptcha callbacks"}
+  ],
+  "player.twitch.tv": [
+    {"path": "/js/embed/v1.js", "notes": "Twitch embed — controllable via options callbacks"}
   ]
 }

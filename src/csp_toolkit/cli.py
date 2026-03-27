@@ -14,6 +14,8 @@ from .bypass import find_bypasses
 from .diff import diff_headers, diff_policies
 from .fetcher import fetch_csp
 from .generator import CSPBuilder
+from .probes import analyze_report_uri, check_header_injection, detect_nonce_reuse
+from .tracker import check_evolution, load_history
 from .output import (
     format_findings_detail,
     format_findings_json,
@@ -468,3 +470,163 @@ def subdomains(domain: str, prefixes: str | None, fmt: str, no_verify_ssl: bool,
         with_csp = sum(1 for r in results if r.scan.has_csp)
         no_csp = sum(1 for r in results if not r.scan.has_csp)
         console.print(f"\n[bold]{len(results)}[/bold] reachable, [bold]{with_csp}[/bold] with CSP, [bold]{no_csp}[/bold] without CSP")
+
+
+@main.command()
+@click.argument("urls", nargs=-1)
+@click.option("--file", "-f", "file_path", help="Read URLs from file (one per line)")
+@click.option("--timeout", type=float, default=10.0)
+def monitor(urls: tuple[str, ...], file_path: str | None, timeout: float):
+    """Track CSP changes over time. Run periodically to detect policy evolution.
+
+    Stores snapshots in ~/.csp-toolkit/snapshots/ and alerts on changes.
+    """
+    url_list = list(urls)
+    if file_path:
+        if file_path == "-":
+            url_list.extend(line.strip() for line in sys.stdin if line.strip())
+        else:
+            with open(file_path) as f:
+                url_list.extend(line.strip() for line in f if line.strip())
+
+    if not url_list:
+        click.echo("Error: provide URLs as arguments or via --file", err=True)
+        sys.exit(1)
+
+    results = check_evolution(url_list, timeout=timeout)
+
+    for snap, alert in results:
+        if alert is None:
+            console.print(f"[red]Error checking {snap.url}[/red]")
+            continue
+
+        grade_color = _GRADE_COLORS.get(snap.grade, "white")
+
+        if alert.alert_type == "new" and alert.old_snapshot is alert.new_snapshot:
+            console.print(f"[bold]{snap.url}[/bold]: [{grade_color}]{snap.grade} ({snap.score})[/{grade_color}] [dim](first snapshot)[/dim]")
+        elif alert.alert_type == "weakened":
+            old = alert.old_snapshot
+            console.print(f"[bold red]WEAKENED[/bold red] {snap.url}: {old.grade}({old.score}) → [{grade_color}]{snap.grade}({snap.score})[/{grade_color}]")
+            for c in alert.diff.weakened:
+                console.print(f"  [red]  {c.directive} ({c.change_type})[/red]")
+        elif alert.alert_type == "strengthened":
+            old = alert.old_snapshot
+            console.print(f"[bold green]STRENGTHENED[/bold green] {snap.url}: {old.grade}({old.score}) → [{grade_color}]{snap.grade}({snap.score})[/{grade_color}]")
+        elif alert.alert_type == "csp_removed":
+            console.print(f"[bold red]CSP REMOVED[/bold red] {snap.url}: CSP header no longer present!")
+        elif alert.alert_type == "changed":
+            old = alert.old_snapshot
+            console.print(f"[yellow]CHANGED[/yellow] {snap.url}: {old.grade}({old.score}) → [{grade_color}]{snap.grade}({snap.score})[/{grade_color}]")
+        else:
+            console.print(f"[dim]No change[/dim] {snap.url}: [{grade_color}]{snap.grade} ({snap.score})[/{grade_color}]")
+
+
+@main.command("history")
+@click.argument("url")
+def history_cmd(url: str):
+    """Show CSP snapshot history for a URL."""
+    snapshots = load_history(url)
+    if not snapshots:
+        console.print(f"[yellow]No snapshots found for {url}[/yellow]")
+        console.print("[dim]Run 'csp-toolkit monitor' first to take snapshots.[/dim]")
+        return
+
+    table = Table(title=f"CSP History — {url}")
+    table.add_column("Timestamp", width=20)
+    table.add_column("Grade", width=5, justify="center")
+    table.add_column("Score", width=5, justify="right")
+    table.add_column("Mode", width=12)
+    table.add_column("CSP (truncated)", ratio=1)
+
+    for snap in snapshots:
+        ts = snap.timestamp[:19].replace("T", " ")
+        color = _GRADE_COLORS.get(snap.grade, "white")
+        grade_text = Text(snap.grade, style=color)
+        mode = "report-only" if snap.report_only else "enforced"
+        csp_trunc = snap.csp_raw[:80] + "..." if len(snap.csp_raw) > 80 else (snap.csp_raw or "(no CSP)")
+        table.add_row(ts, grade_text, str(snap.score), mode, csp_trunc)
+
+    console.print(table)
+
+
+@main.command("nonce-check")
+@click.argument("url")
+@click.option("--requests", "-n", type=int, default=5, help="Number of requests to make")
+@click.option("--no-verify-ssl", is_flag=True)
+def nonce_check(url: str, requests: int, no_verify_ssl: bool):
+    """Check if a URL reuses CSP nonces (static nonce = CSP bypass)."""
+    console.print(f"[bold]Checking nonce reuse on {url} ({requests} requests)...[/bold]\n")
+
+    result = detect_nonce_reuse(url, num_requests=requests, verify_ssl=not no_verify_ssl)
+
+    if result is None:
+        console.print("[dim]No nonces found in CSP headers.[/dim]")
+        return
+
+    if result.is_static:
+        console.print(f"[bold red]VULNERABLE: Static nonce detected![/bold red]")
+        console.print(f"  Directive: {result.directive}")
+        console.print(f"  Nonce value: '{result.nonces_found[0]}' (same across {result.num_requests} requests)")
+        console.print(f"  Impact: Attacker can reuse this nonce to bypass CSP nonce-based protection.")
+    else:
+        unique = len(set(result.nonces_found))
+        console.print(f"[green]Nonces are rotating correctly.[/green]")
+        console.print(f"  Directive: {result.directive}")
+        console.print(f"  {unique} unique nonces across {len(result.nonces_found)} requests")
+
+
+@main.command("header-inject")
+@click.argument("url")
+@click.option("--no-verify-ssl", is_flag=True)
+def header_inject(url: str, no_verify_ssl: bool):
+    """Test for CSP header injection via CRLF injection vectors."""
+    console.print(f"[bold]Testing header injection on {url}...[/bold]\n")
+
+    result = check_header_injection(url, verify_ssl=not no_verify_ssl)
+
+    if result.vulnerable:
+        console.print(f"[bold red]VULNERABLE: Header injection detected![/bold red]")
+        console.print(f"  Technique: {result.technique}")
+        console.print(f"  {result.details}")
+    else:
+        console.print(f"[green]No header injection vectors detected.[/green]")
+
+
+@main.command("report-uri")
+@click.argument("csp", required=False)
+@click.option("--file", "-f", "file_path", help="Read CSP from file")
+@click.option("--url", "fetch_url", help="Fetch CSP from URL first")
+@click.option("--no-verify-ssl", is_flag=True)
+def report_uri_cmd(csp: str | None, file_path: str | None, fetch_url: str | None, no_verify_ssl: bool):
+    """Analyze the report-uri/report-to endpoint in a CSP policy."""
+    if fetch_url:
+        result = fetch_csp(fetch_url, verify_ssl=not no_verify_ssl)
+        if not result.policies:
+            console.print(f"[yellow]No CSP found at {fetch_url}[/yellow]")
+            return
+        policy = result.policies[0]
+    else:
+        raw = _read_csp_input(csp, file_path)
+        policy = parse(raw)
+
+    console.print(f"[bold]Analyzing report-uri/report-to...[/bold]\n")
+
+    result = analyze_report_uri(policy, verify_ssl=not no_verify_ssl)
+
+    if not result.report_uri and not result.report_to:
+        console.print("[yellow]No report-uri or report-to directive found in this policy.[/yellow]")
+        return
+
+    if result.report_uri:
+        console.print(f"[bold]report-uri:[/bold] {result.report_uri}")
+        if result.uri_reachable is True:
+            console.print(f"  [green]Reachable[/green] (HTTP {result.uri_status_code})")
+            if result.accepts_post:
+                console.print(f"  [green]Accepts POST[/green] with CSP violation reports")
+            else:
+                console.print(f"  [yellow]Does NOT accept POST[/yellow] — reports may not be collected")
+        elif result.uri_reachable is False:
+            console.print(f"  [red]NOT reachable[/red] — violation reports are being lost")
+
+    if result.report_to:
+        console.print(f"[bold]report-to:[/bold] {result.report_to} [dim](group name — endpoint configured via Report-To header)[/dim]")

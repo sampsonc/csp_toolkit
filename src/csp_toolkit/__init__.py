@@ -7,34 +7,53 @@ from .fetcher import FetchResult, fetch_csp
 from .generator import CSPBuilder
 from .models import Directive, Finding, Policy, Severity, Source, SourceType
 from .parser import parse, parse_meta
+from .probes import (
+    HeaderInjectionResult,
+    NonceReuseResult,
+    ReportUriResult,
+    analyze_report_uri,
+    check_header_injection,
+    detect_nonce_reuse,
+)
 from .scanner import ScanResult, scan_url, scan_urls
 from .subdomain import SubdomainResult, check_subdomains
+from .tracker import EvolutionAlert, Snapshot, check_evolution, take_snapshot
 
 __all__ = [
     "analyze",
     "analyze_header",
+    "analyze_report_uri",
     "check_domain_gadgets",
     "check_domain_jsonp",
+    "check_evolution",
+    "check_header_injection",
     "check_subdomains",
     "CSPBuilder",
+    "detect_nonce_reuse",
     "diff_headers",
     "diff_policies",
     "Directive",
+    "EvolutionAlert",
     "fetch_csp",
     "FetchResult",
     "find_bypasses",
     "Finding",
+    "HeaderInjectionResult",
+    "NonceReuseResult",
     "parse",
     "parse_meta",
     "probe_jsonp_endpoint",
     "Policy",
     "PolicyDiff",
+    "ReportUriResult",
     "scan_url",
     "scan_urls",
     "ScanResult",
     "score_policy",
     "Severity",
+    "Snapshot",
     "Source",
     "SourceType",
     "SubdomainResult",
+    "take_snapshot",
 ]
