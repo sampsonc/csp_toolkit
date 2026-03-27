@@ -1,6 +1,7 @@
 """Tests for active probes — nonce reuse, header injection, report-uri analysis."""
 
 from csp_toolkit.probes import (
+    NonceReuseStatus,
     analyze_report_uri,
     check_header_injection,
     detect_nonce_reuse,
@@ -9,14 +10,35 @@ from csp_toolkit.parser import parse
 
 
 class TestNonceReuse:
-    def test_no_nonces_returns_none(self):
-        # With an unreachable URL, we get None
+    def test_unreachable_is_fetch_failed(self):
         result = detect_nonce_reuse(
             "https://this-does-not-exist-99999.com",
             num_requests=2,
             timeout=2.0,
         )
-        assert result is None
+        assert result.status == NonceReuseStatus.FETCH_FAILED
+        assert result.http_responses == 0
+        assert result.last_error is not None
+        assert not result
+
+    def test_csp_without_nonce(self, httpx_mock):
+        httpx_mock.add_response(
+            url="https://example.com",
+            headers={"content-security-policy": "default-src 'self'"},
+        )
+        result = detect_nonce_reuse("https://example.com", num_requests=1)
+        assert result.status == NonceReuseStatus.NO_NONCE
+        assert result.http_responses == 1
+        assert not result
+
+    def test_nonce_bool_like_legacy(self, httpx_mock):
+        httpx_mock.add_response(
+            url="https://example.com",
+            headers={"content-security-policy": "script-src 'nonce-abc'"},
+        )
+        result = detect_nonce_reuse("https://example.com", num_requests=1)
+        assert result.status == NonceReuseStatus.ANALYZED
+        assert bool(result)
 
 
 class TestHeaderInjection:

@@ -1,7 +1,5 @@
 """Tests for CSP fetcher — mocked HTTP responses."""
 
-import pytest
-
 from csp_toolkit.fetcher import fetch_csp
 
 
@@ -51,6 +49,24 @@ class TestFetchCsp:
         )
         result = fetch_csp("https://example.com")
         assert len(result.policies) == 2
+
+    def test_multiple_csp_headers(self, httpx_mock):
+        """Each Content-Security-Policy header field is a separate policy."""
+        a = "default-src 'none'"
+        b = "script-src 'self'"
+        httpx_mock.add_response(
+            url="https://example.com",
+            headers=[
+                ("content-security-policy", a),
+                ("content-security-policy", b),
+            ],
+        )
+        result = fetch_csp("https://example.com")
+        assert result.csp_headers == [a, b]
+        assert result.csp_header == a
+        assert len(result.policies) == 2
+        assert result.policies[0].has_directive("default-src")
+        assert result.policies[1].has_directive("script-src")
 
     def test_meta_tag_extraction(self, httpx_mock):
         httpx_mock.add_response(

@@ -16,11 +16,21 @@ class FetchResult:
     url: str
     final_url: str
     status_code: int
-    csp_header: str | None = None
-    csp_report_only_header: str | None = None
+    csp_headers: list[str] = field(default_factory=list)
+    csp_report_only_headers: list[str] = field(default_factory=list)
     csp_meta_tags: list[str] = field(default_factory=list)
     policies: list[Policy] = field(default_factory=list)
     security_headers: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def csp_header(self) -> str | None:
+        """First ``Content-Security-Policy`` header value (backwards compatibility)."""
+        return self.csp_headers[0] if self.csp_headers else None
+
+    @property
+    def csp_report_only_header(self) -> str | None:
+        """First ``Content-Security-Policy-Report-Only`` header value (backwards compatibility)."""
+        return self.csp_report_only_headers[0] if self.csp_report_only_headers else None
 
 
 _SECURITY_HEADER_NAMES = {
@@ -45,6 +55,9 @@ def fetch_csp(
 ) -> FetchResult:
     """Fetch CSP headers and meta tags from a URL.
 
+    Multiple ``Content-Security-Policy`` (or Report-Only) header fields are each
+    parsed as a separate policy, per the CSP specification.
+
     Args:
         url: The URL to fetch.
         follow_redirects: Whether to follow HTTP redirects.
@@ -67,16 +80,19 @@ def fetch_csp(
         status_code=response.status_code,
     )
 
-    # Extract CSP from headers
-    csp_header = response.headers.get("content-security-policy")
-    if csp_header:
-        result.csp_header = csp_header
-        result.policies.append(parse(csp_header, report_only=False))
+    for raw in response.headers.get_list("content-security-policy"):
+        raw = raw.strip()
+        if not raw:
+            continue
+        result.csp_headers.append(raw)
+        result.policies.append(parse(raw, report_only=False))
 
-    csp_ro_header = response.headers.get("content-security-policy-report-only")
-    if csp_ro_header:
-        result.csp_report_only_header = csp_ro_header
-        result.policies.append(parse(csp_ro_header, report_only=True))
+    for raw in response.headers.get_list("content-security-policy-report-only"):
+        raw = raw.strip()
+        if not raw:
+            continue
+        result.csp_report_only_headers.append(raw)
+        result.policies.append(parse(raw, report_only=True))
 
     # Extract CSP from <meta> tags
     content_type = response.headers.get("content-type", "")

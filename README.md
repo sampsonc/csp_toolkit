@@ -136,6 +136,8 @@ csp-toolkit nonce-check https://target.com -n 10  # 10 requests
 
 Fetches the URL multiple times and checks if the CSP nonce changes. A static nonce completely defeats nonce-based CSP protection.
 
+The CLI distinguishes **unreachable host** (no HTTP responses) from **CSP present but no nonce**. In code, use `NonceReuseStatus` (`ANALYZED`, `NO_NONCE`, `FETCH_FAILED`) on the result of `detect_nonce_reuse`.
+
 ### `header-inject` — Test for CSP header injection
 
 ```bash
@@ -249,9 +251,9 @@ snapshot, alert = csp_toolkit.take_snapshot("https://example.com")
 if alert and alert.alert_type == "weakened":
     print(f"CSP weakened! {alert.score_delta}")
 
-# Detect nonce reuse
+# Detect nonce reuse (check result.status: ANALYZED, NO_NONCE, or FETCH_FAILED)
 result = csp_toolkit.detect_nonce_reuse("https://example.com")
-if result and result.is_static:
+if result.status == csp_toolkit.NonceReuseStatus.ANALYZED and result.is_static:
     print(f"Static nonce: {result.nonces_found[0]}")
 
 # Check header injection
@@ -346,13 +348,19 @@ cat flagged.txt | awk '{print $NF}' | sort -u | csp-toolkit scan -f - -o csv
 
 ## Development
 
+Use active probes (`fetch`, `scan`, `header-inject`, `nonce-check`, `bypass --check-live`, etc.) only against systems you are **authorized** to test.
+
 ```bash
 # Install dev dependencies
 uv sync --all-extras
 
-# Run tests (258 tests)
+# Run tests (261 tests)
 uv run pytest -v
 
-# Lint
-uv run ruff check src/
+# Same coverage gate as CI (optional locally)
+uv run pytest --cov=csp_toolkit --cov-fail-under=75 -q
+
+# Lint and format check
+uv run ruff check src/ tests/
+uv run ruff format --check src/ tests/
 ```

@@ -87,7 +87,9 @@ def save_snapshot(snapshot: Snapshot, *, store_dir: Path | None = None) -> None:
         json.dump(history, f, indent=2)
 
 
-def take_snapshot(url: str, *, store_dir: Path | None = None, timeout: float = 10.0) -> tuple[Snapshot, EvolutionAlert | None]:
+def take_snapshot(
+    url: str, *, store_dir: Path | None = None, timeout: float = 10.0
+) -> tuple[Snapshot, EvolutionAlert | None]:
     """Fetch current CSP, store it, and compare against the previous snapshot.
 
     Returns the new snapshot and an alert if the policy changed.
@@ -109,8 +111,12 @@ def take_snapshot(url: str, *, store_dir: Path | None = None, timeout: float = 1
 
     now = datetime.now(timezone.utc).isoformat()
     new_snap = Snapshot(
-        url=url, timestamp=now, csp_raw=csp_raw,
-        grade=grade, score=score, report_only=report_only,
+        url=url,
+        timestamp=now,
+        csp_raw=csp_raw,
+        grade=grade,
+        score=score,
+        report_only=report_only,
     )
 
     # Compare against previous
@@ -137,14 +143,22 @@ def take_snapshot(url: str, *, store_dir: Path | None = None, timeout: float = 1
                 alert_type = "changed"
 
             alert = EvolutionAlert(
-                url=url, old_snapshot=prev, new_snapshot=new_snap,
-                diff=diff, score_delta=score_delta, alert_type=alert_type,
+                url=url,
+                old_snapshot=prev,
+                new_snapshot=new_snap,
+                diff=diff,
+                score_delta=score_delta,
+                alert_type=alert_type,
             )
     else:
         # First snapshot
         alert = EvolutionAlert(
-            url=url, old_snapshot=new_snap, new_snapshot=new_snap,
-            diff=PolicyDiff(), score_delta=0, alert_type="new",
+            url=url,
+            old_snapshot=new_snap,
+            new_snapshot=new_snap,
+            diff=PolicyDiff(),
+            score_delta=0,
+            alert_type="new",
         )
 
     save_snapshot(new_snap, store_dir=store_dir)
@@ -165,6 +179,8 @@ def check_evolution(
             results.append((snap, alert))
         except Exception:
             now = datetime.now(timezone.utc).isoformat()
-            error_snap = Snapshot(url=url, timestamp=now, csp_raw="", grade="?", score=0, report_only=False)
+            error_snap = Snapshot(
+                url=url, timestamp=now, csp_raw="", grade="?", score=0, report_only=False
+            )
             results.append((error_snap, None))
     return results

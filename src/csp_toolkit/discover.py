@@ -24,6 +24,7 @@ def _sha256_hash(content: str) -> str:
 @dataclass
 class InlineContent:
     """Represents an inline script or style found on the page."""
+
     tag: str  # "script" or "style"
     content: str
     sha256: str  # CSP-compatible hash: 'sha256-...'
@@ -103,9 +104,11 @@ def _extract_origin(resource_url: str, page_url: str) -> str | None:
         return None
 
     # Same origin check
-    if (parsed.scheme == page_parsed.scheme and
-            parsed.hostname == page_parsed.hostname and
-            (parsed.port or 443) == (page_parsed.port or 443)):
+    if (
+        parsed.scheme == page_parsed.scheme
+        and parsed.hostname == page_parsed.hostname
+        and (parsed.port or 443) == (page_parsed.port or 443)
+    ):
         return None  # Same origin, covered by 'self'
 
     # Build origin
@@ -141,12 +144,14 @@ def _extract_resources_from_html(
         elif tag.string and tag.string.strip():
             resources.has_inline_scripts = True
             content = tag.string
-            resources.inline_scripts.append(InlineContent(
-                tag="script",
-                content=content,
-                sha256=_sha256_hash(content),
-                page_url=page_url,
-            ))
+            resources.inline_scripts.append(
+                InlineContent(
+                    tag="script",
+                    content=content,
+                    sha256=_sha256_hash(content),
+                    page_url=page_url,
+                )
+            )
 
     # Stylesheets
     for tag in soup.find_all("link", rel=lambda r: r and "stylesheet" in r):
@@ -159,12 +164,14 @@ def _extract_resources_from_html(
         if style_tag.string and style_tag.string.strip():
             resources.has_inline_styles = True
             content = style_tag.string
-            resources.inline_styles.append(InlineContent(
-                tag="style",
-                content=content,
-                sha256=_sha256_hash(content),
-                page_url=page_url,
-            ))
+            resources.inline_styles.append(
+                InlineContent(
+                    tag="style",
+                    content=content,
+                    sha256=_sha256_hash(content),
+                    page_url=page_url,
+                )
+            )
 
     # Inline style attributes
     if soup.find(attrs={"style": True}):
@@ -252,8 +259,7 @@ def _extract_resources_from_html(
         href = tag["href"]
         resolved = urljoin(page_url, href)
         link_parsed = urlparse(resolved)
-        if (link_parsed.hostname == page_parsed.hostname and
-                link_parsed.scheme in ("http", "https")):
+        if link_parsed.hostname == page_parsed.hostname and link_parsed.scheme in ("http", "https"):
             # Normalize: strip fragment, keep path
             clean = f"{link_parsed.scheme}://{link_parsed.hostname}{link_parsed.path}"
             same_origin_links.append(clean)

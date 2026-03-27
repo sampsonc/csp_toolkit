@@ -81,7 +81,7 @@ def check_subdomains(
     base_domain = base_domain.strip().lower()
     for prefix in ("https://", "http://"):
         if base_domain.startswith(prefix):
-            base_domain = base_domain[len(prefix):]
+            base_domain = base_domain[len(prefix) :]
     base_domain = base_domain.rstrip("/")
 
     # Also check the bare domain
@@ -95,11 +95,13 @@ def check_subdomains(
         if scan.error:
             continue  # Skip unreachable subdomains
         subdomain = url.replace("https://", "")
-        results.append(SubdomainResult(
-            subdomain=subdomain,
-            url=url,
-            scan=scan,
-        ))
+        results.append(
+            SubdomainResult(
+                subdomain=subdomain,
+                url=url,
+                scan=scan,
+            )
+        )
 
     # Sort by score ascending (weakest first), then has_csp=False before has_csp=True
     def sort_key(r: SubdomainResult) -> tuple:

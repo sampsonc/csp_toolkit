@@ -16,67 +16,73 @@ class Severity(Enum):
 
 
 class SourceType(Enum):
-    KEYWORD = "keyword"      # 'self', 'none', 'unsafe-inline', 'unsafe-eval', 'strict-dynamic', etc.
-    HOST = "host"            # example.com, *.example.com, https://example.com
-    SCHEME = "scheme"        # https:, data:, blob:, mediastream:, filesystem:
-    NONCE = "nonce"          # 'nonce-abc123'
-    HASH = "hash"            # 'sha256-...', 'sha384-...', 'sha512-...'
-    WILDCARD = "wildcard"    # *
+    KEYWORD = "keyword"  # 'self', 'none', 'unsafe-inline', 'unsafe-eval', 'strict-dynamic', etc.
+    HOST = "host"  # example.com, *.example.com, https://example.com
+    SCHEME = "scheme"  # https:, data:, blob:, mediastream:, filesystem:
+    NONCE = "nonce"  # 'nonce-abc123'
+    HASH = "hash"  # 'sha256-...', 'sha384-...', 'sha512-...'
+    WILDCARD = "wildcard"  # *
 
 
-KEYWORDS = frozenset({
-    "'self'",
-    "'none'",
-    "'unsafe-inline'",
-    "'unsafe-eval'",
-    "'strict-dynamic'",
-    "'unsafe-hashes'",
-    "'unsafe-allow-redirects'",
-    "'report-sample'",
-    "'wasm-unsafe-eval'",
-    "'inline-speculation-rules'",
-})
+KEYWORDS = frozenset(
+    {
+        "'self'",
+        "'none'",
+        "'unsafe-inline'",
+        "'unsafe-eval'",
+        "'strict-dynamic'",
+        "'unsafe-hashes'",
+        "'unsafe-allow-redirects'",
+        "'report-sample'",
+        "'wasm-unsafe-eval'",
+        "'inline-speculation-rules'",
+    }
+)
 
-SCHEMES = frozenset({
-    "https:",
-    "http:",
-    "data:",
-    "blob:",
-    "mediastream:",
-    "filesystem:",
-})
+SCHEMES = frozenset(
+    {
+        "https:",
+        "http:",
+        "data:",
+        "blob:",
+        "mediastream:",
+        "filesystem:",
+    }
+)
 
-VALID_DIRECTIVES = frozenset({
-    "default-src",
-    "script-src",
-    "script-src-elem",
-    "script-src-attr",
-    "style-src",
-    "style-src-elem",
-    "style-src-attr",
-    "img-src",
-    "font-src",
-    "connect-src",
-    "media-src",
-    "object-src",
-    "prefetch-src",
-    "child-src",
-    "frame-src",
-    "worker-src",
-    "frame-ancestors",
-    "form-action",
-    "base-uri",
-    "navigate-to",
-    "manifest-src",
-    "plugin-types",
-    "sandbox",
-    "report-uri",
-    "report-to",
-    "require-trusted-types-for",
-    "trusted-types",
-    "upgrade-insecure-requests",
-    "block-all-mixed-content",
-})
+VALID_DIRECTIVES = frozenset(
+    {
+        "default-src",
+        "script-src",
+        "script-src-elem",
+        "script-src-attr",
+        "style-src",
+        "style-src-elem",
+        "style-src-attr",
+        "img-src",
+        "font-src",
+        "connect-src",
+        "media-src",
+        "object-src",
+        "prefetch-src",
+        "child-src",
+        "frame-src",
+        "worker-src",
+        "frame-ancestors",
+        "form-action",
+        "base-uri",
+        "navigate-to",
+        "manifest-src",
+        "plugin-types",
+        "sandbox",
+        "report-uri",
+        "report-to",
+        "require-trusted-types-for",
+        "trusted-types",
+        "upgrade-insecure-requests",
+        "block-all-mixed-content",
+    }
+)
 
 _NONCE_RE = re.compile(r"^'nonce-[A-Za-z0-9+/=_-]+'$")
 _HASH_RE = re.compile(r"^'sha(256|384|512)-[A-Za-z0-9+/=]+'$")
@@ -171,11 +177,22 @@ class Policy:
 
         # Only fetch directives fall back to default-src
         fetch_directives = {
-            "script-src", "script-src-elem", "script-src-attr",
-            "style-src", "style-src-elem", "style-src-attr",
-            "img-src", "font-src", "connect-src", "media-src",
-            "object-src", "prefetch-src", "child-src", "frame-src",
-            "worker-src", "manifest-src",
+            "script-src",
+            "script-src-elem",
+            "script-src-attr",
+            "style-src",
+            "style-src-elem",
+            "style-src-attr",
+            "img-src",
+            "font-src",
+            "connect-src",
+            "media-src",
+            "object-src",
+            "prefetch-src",
+            "child-src",
+            "frame-src",
+            "worker-src",
+            "manifest-src",
         }
         if name.lower() in fetch_directives:
             return self.get_directive("default-src")

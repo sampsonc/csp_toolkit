@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CSP Toolkit",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "Analyze Content Security Policy headers — grade, findings, and bypass vectors for every page you visit.",
   "permissions": [
     "webRequest",

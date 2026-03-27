@@ -1,6 +1,5 @@
 """Tests for policy evolution tracker."""
 
-import json
 import tempfile
 from pathlib import Path
 
@@ -31,7 +30,9 @@ class TestSaveAndLoad:
                 url="https://example.com",
                 timestamp="2025-01-01T00:00:00+00:00",
                 csp_raw="script-src 'self'",
-                grade="A", score=90, report_only=False,
+                grade="A",
+                score=90,
+                report_only=False,
             )
             save_snapshot(snap, store_dir=store)
 
@@ -45,9 +46,11 @@ class TestSaveAndLoad:
             for i in range(3):
                 snap = Snapshot(
                     url="https://example.com",
-                    timestamp=f"2025-01-0{i+1}T00:00:00+00:00",
+                    timestamp=f"2025-01-0{i + 1}T00:00:00+00:00",
                     csp_raw="script-src 'self'",
-                    grade="A", score=90 + i, report_only=False,
+                    grade="A",
+                    score=90 + i,
+                    report_only=False,
                 )
                 save_snapshot(snap, store_dir=store)
 

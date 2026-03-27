@@ -1,7 +1,6 @@
 """Tests for CSP diff module."""
 
-from csp_toolkit.diff import diff_headers, diff_policies
-from csp_toolkit.parser import parse
+from csp_toolkit.diff import diff_headers
 
 
 class TestDiffPolicies:

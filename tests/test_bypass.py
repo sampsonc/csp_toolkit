@@ -6,7 +6,6 @@ from csp_toolkit.bypass import (
     check_domain_jsonp,
     find_bypasses,
     find_bypasses_header,
-    probe_jsonp_endpoint,
     _domain_matches,
 )
 from csp_toolkit.models import Finding, Severity
@@ -206,8 +205,18 @@ class TestCombinedPolicy:
 class TestVerifyLiveEndpoints:
     def test_non_jsonp_findings_passed_through(self):
         findings = [
-            Finding(severity=Severity.CRITICAL, title="data: bypass", description="...", bypass_type="data_uri"),
-            Finding(severity=Severity.MEDIUM, title="base tag", description="...", bypass_type="base_uri"),
+            Finding(
+                severity=Severity.CRITICAL,
+                title="data: bypass",
+                description="...",
+                bypass_type="data_uri",
+            ),
+            Finding(
+                severity=Severity.MEDIUM,
+                title="base tag",
+                description="...",
+                bypass_type="base_uri",
+            ),
         ]
         result = _verify_live_endpoints(findings)
         assert len(result) == 2

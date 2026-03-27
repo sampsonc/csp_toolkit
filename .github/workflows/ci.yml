@@ -26,10 +26,17 @@ jobs:
         run: uv sync --all-extras
 
       - name: Lint
-        run: uv run ruff check src/
+        run: uv run ruff check src/ tests/
 
-      - name: Run tests
-        run: uv run pytest -v --tb=short
+      - name: Format
+        run: uv run ruff format --check src/ tests/
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest -v --tb=short \
+            --cov=csp_toolkit \
+            --cov-report=term \
+            --cov-fail-under=75
 
   build:
     runs-on: ubuntu-latest

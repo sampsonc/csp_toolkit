@@ -32,7 +32,9 @@ def _load_bypass_patterns() -> dict:
         return json.load(f)
 
 
-def find_bypasses(policy: Policy, *, check_live: bool = False, timeout: float = 5.0) -> list[Finding]:
+def find_bypasses(
+    policy: Policy, *, check_live: bool = False, timeout: float = 5.0
+) -> list[Finding]:
     """Enumerate potential CSP bypasses for a given policy.
 
     Args:
@@ -90,7 +92,7 @@ def _domain_matches(source_host: str, db_domain: str) -> bool:
     # Strip scheme if present
     for prefix in ("https://", "http://"):
         if source_lower.startswith(prefix):
-            source_lower = source_lower[len(prefix):]
+            source_lower = source_lower[len(prefix) :]
 
     # Strip port if present
     if ":" in source_lower:
@@ -136,18 +138,20 @@ def _check_jsonp_bypasses(policy: Policy) -> list[Finding]:
         for db_domain, endpoints in endpoints_db.items():
             if _domain_matches(host, db_domain):
                 for ep in endpoints:
-                    findings.append(Finding(
-                        severity=Severity.HIGH,
-                        title=f"JSONP bypass via {db_domain}",
-                        description=(
-                            f"The whitelisted source '{host}' matches {db_domain} which has "
-                            f"a known JSONP endpoint: {ep['path']}\n"
-                            f"Notes: {ep['notes']}\n\n"
-                            f"Payload: <script src='https://{db_domain}{ep['path'].replace('CALLBACK', 'alert(document.domain)//')}'></script>"
-                        ),
-                        directive="script-src",
-                        bypass_type="jsonp",
-                    ))
+                    findings.append(
+                        Finding(
+                            severity=Severity.HIGH,
+                            title=f"JSONP bypass via {db_domain}",
+                            description=(
+                                f"The whitelisted source '{host}' matches {db_domain} which has "
+                                f"a known JSONP endpoint: {ep['path']}\n"
+                                f"Notes: {ep['notes']}\n\n"
+                                f"Payload: <script src='https://{db_domain}{ep['path'].replace('CALLBACK', 'alert(document.domain)//')}'></script>"
+                            ),
+                            directive="script-src",
+                            bypass_type="jsonp",
+                        )
+                    )
     return findings
 
 
@@ -165,20 +169,22 @@ def _check_cdn_gadgets(policy: Policy) -> list[Finding]:
                     if gadget.get("max_safe_version"):
                         version_info = f" (versions < {gadget['max_safe_version']})"
 
-                    findings.append(Finding(
-                        severity=Severity.HIGH,
-                        title=f"Script gadget: {gadget['library']} on {db_domain}{version_info}",
-                        description=(
-                            f"The whitelisted source '{host}' matches {db_domain} which hosts "
-                            f"{gadget['library']}.\n"
-                            f"Technique: {gadget['technique']}\n"
-                            f"Payload: {gadget['payload']}\n"
-                            f"Notes: {gadget['notes']}"
-                        ),
-                        directive="script-src",
-                        bypass_type="cdn_gadget",
-                        references=gadget.get("references", []),
-                    ))
+                    findings.append(
+                        Finding(
+                            severity=Severity.HIGH,
+                            title=f"Script gadget: {gadget['library']} on {db_domain}{version_info}",
+                            description=(
+                                f"The whitelisted source '{host}' matches {db_domain} which hosts "
+                                f"{gadget['library']}.\n"
+                                f"Technique: {gadget['technique']}\n"
+                                f"Payload: {gadget['payload']}\n"
+                                f"Notes: {gadget['notes']}"
+                            ),
+                            directive="script-src",
+                            bypass_type="cdn_gadget",
+                            references=gadget.get("references", []),
+                        )
+                    )
     return findings
 
 
@@ -189,16 +195,18 @@ def _check_data_uri_bypass(policy: Policy) -> list[Finding]:
         patterns = _load_bypass_patterns()
         pattern = patterns.get("data_uri_script", {})
         payloads = pattern.get("payloads", [])
-        return [Finding(
-            severity=Severity.CRITICAL,
-            title="data: URI script injection bypass",
-            description=(
-                "data: in script-src allows direct script injection.\n\n"
-                "Payloads:\n" + "\n".join(f"  {p}" for p in payloads)
-            ),
-            directive="script-src",
-            bypass_type="data_uri",
-        )]
+        return [
+            Finding(
+                severity=Severity.CRITICAL,
+                title="data: URI script injection bypass",
+                description=(
+                    "data: in script-src allows direct script injection.\n\n"
+                    "Payloads:\n" + "\n".join(f"  {p}" for p in payloads)
+                ),
+                directive="script-src",
+                bypass_type="data_uri",
+            )
+        ]
     return []
 
 
@@ -209,16 +217,18 @@ def _check_blob_uri_bypass(policy: Policy) -> list[Finding]:
         patterns = _load_bypass_patterns()
         pattern = patterns.get("blob_uri_script", {})
         payloads = pattern.get("payloads", [])
-        return [Finding(
-            severity=Severity.HIGH,
-            title="blob: URI script injection bypass",
-            description=(
-                "blob: in script-src allows blob-based script creation (requires existing JS execution).\n\n"
-                "Payloads:\n" + "\n".join(f"  {p}" for p in payloads)
-            ),
-            directive="script-src",
-            bypass_type="blob_uri",
-        )]
+        return [
+            Finding(
+                severity=Severity.HIGH,
+                title="blob: URI script injection bypass",
+                description=(
+                    "blob: in script-src allows blob-based script creation (requires existing JS execution).\n\n"
+                    "Payloads:\n" + "\n".join(f"  {p}" for p in payloads)
+                ),
+                directive="script-src",
+                bypass_type="blob_uri",
+            )
+        ]
     return []
 
 
@@ -228,15 +238,18 @@ def _check_base_uri_bypass(policy: Policy) -> list[Finding]:
         patterns = _load_bypass_patterns()
         pattern = patterns.get("base_uri_injection", {})
         payloads = pattern.get("payloads", [])
-        return [Finding(
-            severity=Severity.MEDIUM,
-            title="<base> tag injection (missing base-uri)",
-            description=(
-                "Without base-uri, injecting a <base> tag redirects all relative URL loads.\n\n"
-                "Payload: " + (payloads[0] if payloads else "<base href='https://attacker.com/'>")
-            ),
-            bypass_type="base_uri",
-        )]
+        return [
+            Finding(
+                severity=Severity.MEDIUM,
+                title="<base> tag injection (missing base-uri)",
+                description=(
+                    "Without base-uri, injecting a <base> tag redirects all relative URL loads.\n\n"
+                    "Payload: "
+                    + (payloads[0] if payloads else "<base href='https://attacker.com/'>")
+                ),
+                bypass_type="base_uri",
+            )
+        ]
     return []
 
 
@@ -246,15 +259,17 @@ def _check_form_action_bypass(policy: Policy) -> list[Finding]:
         patterns = _load_bypass_patterns()
         pattern = patterns.get("form_action_hijack", {})
         payloads = pattern.get("payloads", [])
-        return [Finding(
-            severity=Severity.MEDIUM,
-            title="Form hijacking (missing form-action)",
-            description=(
-                "Without form-action, forms can submit to attacker-controlled endpoints.\n\n"
-                "Payloads:\n" + "\n".join(f"  {p}" for p in payloads)
-            ),
-            bypass_type="form_action",
-        )]
+        return [
+            Finding(
+                severity=Severity.MEDIUM,
+                title="Form hijacking (missing form-action)",
+                description=(
+                    "Without form-action, forms can submit to attacker-controlled endpoints.\n\n"
+                    "Payloads:\n" + "\n".join(f"  {p}" for p in payloads)
+                ),
+                bypass_type="form_action",
+            )
+        ]
     return []
 
 
@@ -262,45 +277,47 @@ def _check_unsafe_inline_csp2_bypass(policy: Policy) -> list[Finding]:
     """Flag unsafe-inline + nonce/hash as a CSP2 downgrade bypass."""
     sources = policy.effective_sources("script-src")
     has_unsafe_inline = any(s.raw.lower() == "'unsafe-inline'" for s in sources)
-    has_nonce_or_hash = any(
-        s.source_type in (SourceType.NONCE, SourceType.HASH) for s in sources
-    )
+    has_nonce_or_hash = any(s.source_type in (SourceType.NONCE, SourceType.HASH) for s in sources)
     if has_unsafe_inline and has_nonce_or_hash:
-        return [Finding(
-            severity=Severity.MEDIUM,
-            title="CSP2 downgrade: unsafe-inline honored over nonce/hash",
-            description=(
-                "This policy uses both 'unsafe-inline' and nonce/hash in script-src. "
-                "CSP3 browsers ignore unsafe-inline when nonce/hash is present, but "
-                "CSP2 browsers (older Chrome, Firefox, Safari) still honor unsafe-inline.\n\n"
-                "Payload: <script>alert(document.domain)</script>"
-            ),
-            directive="script-src",
-            bypass_type="csp2_downgrade",
-        )]
+        return [
+            Finding(
+                severity=Severity.MEDIUM,
+                title="CSP2 downgrade: unsafe-inline honored over nonce/hash",
+                description=(
+                    "This policy uses both 'unsafe-inline' and nonce/hash in script-src. "
+                    "CSP3 browsers ignore unsafe-inline when nonce/hash is present, but "
+                    "CSP2 browsers (older Chrome, Firefox, Safari) still honor unsafe-inline.\n\n"
+                    "Payload: <script>alert(document.domain)</script>"
+                ),
+                directive="script-src",
+                bypass_type="csp2_downgrade",
+            )
+        ]
     return []
 
 
-_ARBITRARY_HOSTING_DOMAINS = frozenset({
-    "raw.githubusercontent.com",
-    "cdn.rawgit.com",
-    "rawgit.com",
-    "gist.githubusercontent.com",
-    "pastebin.com",
-    "paste.ee",
-    "ideone.com",
-    "jsbin.com",
-    "codepen.io",
-    "jsfiddle.net",
-    "plnkr.co",
-    "surge.sh",
-    "netlify.app",
-    "vercel.app",
-    "pages.dev",
-    "workers.dev",
-    "web.app",
-    "firebaseapp.com",
-})
+_ARBITRARY_HOSTING_DOMAINS = frozenset(
+    {
+        "raw.githubusercontent.com",
+        "cdn.rawgit.com",
+        "rawgit.com",
+        "gist.githubusercontent.com",
+        "pastebin.com",
+        "paste.ee",
+        "ideone.com",
+        "jsbin.com",
+        "codepen.io",
+        "jsfiddle.net",
+        "plnkr.co",
+        "surge.sh",
+        "netlify.app",
+        "vercel.app",
+        "pages.dev",
+        "workers.dev",
+        "web.app",
+        "firebaseapp.com",
+    }
+)
 
 
 def _check_arbitrary_hosting_bypass(policy: Policy) -> list[Finding]:
@@ -312,23 +329,25 @@ def _check_arbitrary_hosting_bypass(policy: Policy) -> list[Finding]:
         host_lower = host.lower()
         for prefix in ("https://", "http://"):
             if host_lower.startswith(prefix):
-                host_lower = host_lower[len(prefix):]
+                host_lower = host_lower[len(prefix) :]
         if ":" in host_lower:
             host_lower = host_lower.rsplit(":", 1)[0]
 
         for domain in _ARBITRARY_HOSTING_DOMAINS:
             if host_lower == domain or host_lower.endswith("." + domain):
-                findings.append(Finding(
-                    severity=Severity.CRITICAL,
-                    title=f"Arbitrary JS hosting on {domain}",
-                    description=(
-                        f"The whitelisted source '{host}' allows loading scripts from {domain}, "
-                        f"where anyone can host arbitrary content. An attacker can host malicious "
-                        f"JS on this domain and load it via the CSP whitelist."
-                    ),
-                    directive="script-src",
-                    bypass_type="arbitrary_hosting",
-                ))
+                findings.append(
+                    Finding(
+                        severity=Severity.CRITICAL,
+                        title=f"Arbitrary JS hosting on {domain}",
+                        description=(
+                            f"The whitelisted source '{host}' allows loading scripts from {domain}, "
+                            f"where anyone can host arbitrary content. An attacker can host malicious "
+                            f"JS on this domain and load it via the CSP whitelist."
+                        ),
+                        directive="script-src",
+                        bypass_type="arbitrary_hosting",
+                    )
+                )
                 break  # One finding per host
 
     # Also check wildcard patterns
@@ -338,16 +357,18 @@ def _check_arbitrary_hosting_bypass(policy: Policy) -> list[Finding]:
             base = host_lower[2:]
             for domain in _ARBITRARY_HOSTING_DOMAINS:
                 if domain == base or domain.endswith("." + base):
-                    findings.append(Finding(
-                        severity=Severity.CRITICAL,
-                        title=f"Wildcard '{host}' covers arbitrary hosting domain {domain}",
-                        description=(
-                            f"The wildcard source '{host}' in script-src covers {domain}, "
-                            f"where anyone can host arbitrary content."
-                        ),
-                        directive="script-src",
-                        bypass_type="arbitrary_hosting",
-                    ))
+                    findings.append(
+                        Finding(
+                            severity=Severity.CRITICAL,
+                            title=f"Wildcard '{host}' covers arbitrary hosting domain {domain}",
+                            description=(
+                                f"The wildcard source '{host}' in script-src covers {domain}, "
+                                f"where anyone can host arbitrary content."
+                            ),
+                            directive="script-src",
+                            bypass_type="arbitrary_hosting",
+                        )
+                    )
                     break
 
     return findings
@@ -407,13 +428,15 @@ def _verify_live_endpoints(findings: list[Finding], *, timeout: float = 5.0) -> 
         else:
             status = "[UNVERIFIED]"
 
-        verified.append(Finding(
-            severity=f.severity,
-            title=f"{status} {f.title}",
-            description=f.description,
-            directive=f.directive,
-            bypass_type=f.bypass_type,
-            references=f.references,
-        ))
+        verified.append(
+            Finding(
+                severity=f.severity,
+                title=f"{status} {f.title}",
+                description=f.description,
+                directive=f.directive,
+                bypass_type=f.bypass_type,
+                references=f.references,
+            )
+        )
 
     return verified

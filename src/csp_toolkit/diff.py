@@ -35,7 +35,15 @@ class PolicyDiff:
         # Removed directives = weaker
         weak.extend(self.removed_directives)
         # Modified directives with added permissive sources
-        _DANGEROUS_SOURCES = {"'unsafe-inline'", "'unsafe-eval'", "*", "data:", "blob:", "https:", "http:"}
+        _DANGEROUS_SOURCES = {
+            "'unsafe-inline'",
+            "'unsafe-eval'",
+            "*",
+            "data:",
+            "blob:",
+            "https:",
+            "http:",
+        }
         for change in self.modified_directives:
             for src in change.added_sources:
                 if src.lower() in _DANGEROUS_SOURCES or src.startswith("*."):
@@ -50,7 +58,15 @@ class PolicyDiff:
         # Added directives = stronger
         strong.extend(self.added_directives)
         # Modified directives with removed permissive sources
-        _DANGEROUS_SOURCES = {"'unsafe-inline'", "'unsafe-eval'", "*", "data:", "blob:", "https:", "http:"}
+        _DANGEROUS_SOURCES = {
+            "'unsafe-inline'",
+            "'unsafe-eval'",
+            "*",
+            "data:",
+            "blob:",
+            "https:",
+            "http:",
+        }
         for change in self.modified_directives:
             for src in change.removed_sources:
                 if src.lower() in _DANGEROUS_SOURCES or src.startswith("*."):
@@ -69,20 +85,24 @@ def diff_policies(old: Policy, new: Policy) -> PolicyDiff:
     # Added directives
     for name in sorted(new_names - old_names):
         d = new.directives[name]
-        result.added_directives.append(DirectiveChange(
-            directive=name,
-            change_type="added",
-            new_sources=[s.raw for s in d.sources],
-        ))
+        result.added_directives.append(
+            DirectiveChange(
+                directive=name,
+                change_type="added",
+                new_sources=[s.raw for s in d.sources],
+            )
+        )
 
     # Removed directives
     for name in sorted(old_names - new_names):
         d = old.directives[name]
-        result.removed_directives.append(DirectiveChange(
-            directive=name,
-            change_type="removed",
-            old_sources=[s.raw for s in d.sources],
-        ))
+        result.removed_directives.append(
+            DirectiveChange(
+                directive=name,
+                change_type="removed",
+                old_sources=[s.raw for s in d.sources],
+            )
+        )
 
     # Shared directives — check for modifications
     for name in sorted(old_names & new_names):
@@ -97,14 +117,16 @@ def diff_policies(old: Policy, new: Policy) -> PolicyDiff:
         else:
             added = sorted(new_sources - old_sources)
             removed = sorted(old_sources - new_sources)
-            result.modified_directives.append(DirectiveChange(
-                directive=name,
-                change_type="modified",
-                old_sources=[s.raw for s in old_d.sources],
-                new_sources=[s.raw for s in new_d.sources],
-                added_sources=added,
-                removed_sources=removed,
-            ))
+            result.modified_directives.append(
+                DirectiveChange(
+                    directive=name,
+                    change_type="modified",
+                    old_sources=[s.raw for s in old_d.sources],
+                    new_sources=[s.raw for s in new_d.sources],
+                    added_sources=added,
+                    removed_sources=removed,
+                )
+            )
 
     return result
 
@@ -112,4 +134,5 @@ def diff_policies(old: Policy, new: Policy) -> PolicyDiff:
 def diff_headers(old_header: str, new_header: str) -> PolicyDiff:
     """Convenience: diff two raw CSP header strings."""
     from .parser import parse
+
     return diff_policies(parse(old_header), parse(new_header))

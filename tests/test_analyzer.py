@@ -71,7 +71,9 @@ class TestDataUriScript:
     def test_not_triggered_in_img_src(self):
         findings = analyze_header("script-src 'self'; img-src data:")
         # data: in img-src should NOT trigger the script-specific check
-        script_data = [f for f in findings if "data:" in f.title.lower() and f.directive == "script-src"]
+        script_data = [
+            f for f in findings if "data:" in f.title.lower() and f.directive == "script-src"
+        ]
         assert script_data == []
 
 
@@ -94,7 +96,9 @@ class TestWildcardSource:
 
     def test_img_src_wildcard_is_medium(self):
         findings = analyze_header("script-src 'self'; img-src *")
-        img_wildcards = [f for f in findings if "wildcard" in f.title.lower() and f.directive == "img-src"]
+        img_wildcards = [
+            f for f in findings if "wildcard" in f.title.lower() and f.directive == "img-src"
+        ]
         assert all(f.severity == Severity.MEDIUM for f in img_wildcards)
 
 
@@ -185,7 +189,11 @@ class TestStrictDynamicWithoutNonce:
 
     def test_not_triggered_with_nonce(self):
         findings = analyze_header("script-src 'nonce-abc' 'strict-dynamic'")
-        sd_findings = [f for f in findings if "strict-dynamic" in f.title.lower() and "without" in f.title.lower()]
+        sd_findings = [
+            f
+            for f in findings
+            if "strict-dynamic" in f.title.lower() and "without" in f.title.lower()
+        ]
         assert sd_findings == []
 
 
@@ -209,7 +217,9 @@ class TestHttpSources:
 
     def test_https_not_flagged(self):
         findings = analyze_header("script-src 'self' https:")
-        http_findings = [f for f in findings if "http:" in f.title.lower() and "https" not in f.title.lower()]
+        http_findings = [
+            f for f in findings if "http:" in f.title.lower() and "https" not in f.title.lower()
+        ]
         assert http_findings == []
 
 
@@ -228,19 +238,27 @@ class TestIpAddressSources:
 class TestDataUriNonScript:
     def test_object_src_data(self):
         findings = analyze_header("script-src 'self'; object-src data:")
-        data_findings = [f for f in findings if "data:" in f.title.lower() and f.directive == "object-src"]
+        data_findings = [
+            f for f in findings if "data:" in f.title.lower() and f.directive == "object-src"
+        ]
         assert len(data_findings) >= 1
 
     def test_frame_src_data(self):
         findings = analyze_header("script-src 'self'; frame-src data:")
-        data_findings = [f for f in findings if "data:" in f.title.lower() and f.directive == "frame-src"]
+        data_findings = [
+            f for f in findings if "data:" in f.title.lower() and f.directive == "frame-src"
+        ]
         assert len(data_findings) >= 1
 
 
 class TestHttpsSchemeScript:
     def test_triggers(self):
         findings = analyze_header("script-src 'self' https:")
-        https_findings = [f for f in findings if "https:" in f.title.lower() and "any https" in f.description.lower()]
+        https_findings = [
+            f
+            for f in findings
+            if "https:" in f.title.lower() and "any https" in f.description.lower()
+        ]
         assert len(https_findings) >= 1
         assert https_findings[0].severity == Severity.HIGH
 
@@ -320,8 +338,11 @@ class TestSortOrder:
         findings = analyze_header("script-src 'self' 'unsafe-inline' 'unsafe-eval' *")
         severities = [f.severity for f in findings]
         severity_order = {
-            Severity.CRITICAL: 0, Severity.HIGH: 1,
-            Severity.MEDIUM: 2, Severity.LOW: 3, Severity.INFO: 4,
+            Severity.CRITICAL: 0,
+            Severity.HIGH: 1,
+            Severity.MEDIUM: 2,
+            Severity.LOW: 3,
+            Severity.INFO: 4,
         }
         values = [severity_order[s] for s in severities]
         assert values == sorted(values)

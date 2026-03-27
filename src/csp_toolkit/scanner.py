@@ -37,18 +37,37 @@ def scan_url(url: str, *, timeout: float = 10.0, verify_ssl: bool = True) -> Sca
         result = fetch_csp(url, timeout=timeout, verify_ssl=verify_ssl)
     except Exception as e:
         return ScanResult(
-            url=url, final_url=url, status_code=0, has_csp=False,
-            grade="?", score=0, num_findings=0, num_bypasses=0,
-            num_critical=0, num_high=0, num_medium=0,
-            policy_mode="error", csp_raw="", error=str(e),
+            url=url,
+            final_url=url,
+            status_code=0,
+            has_csp=False,
+            grade="?",
+            score=0,
+            num_findings=0,
+            num_bypasses=0,
+            num_critical=0,
+            num_high=0,
+            num_medium=0,
+            policy_mode="error",
+            csp_raw="",
+            error=str(e),
         )
 
     if not result.policies:
         return ScanResult(
-            url=url, final_url=result.final_url, status_code=result.status_code,
-            has_csp=False, grade="-", score=0, num_findings=0, num_bypasses=0,
-            num_critical=0, num_high=0, num_medium=0,
-            policy_mode="none", csp_raw="",
+            url=url,
+            final_url=result.final_url,
+            status_code=result.status_code,
+            has_csp=False,
+            grade="-",
+            score=0,
+            num_findings=0,
+            num_bypasses=0,
+            num_critical=0,
+            num_high=0,
+            num_medium=0,
+            policy_mode="none",
+            csp_raw="",
         )
 
     # Use the first enforced policy, or first report-only if no enforced
@@ -104,16 +123,35 @@ def results_to_csv(results: list[ScanResult]) -> str:
     """Export scan results as CSV."""
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow([
-        "url", "grade", "score", "findings", "bypasses",
-        "critical", "high", "medium", "mode", "error",
-    ])
+    writer.writerow(
+        [
+            "url",
+            "grade",
+            "score",
+            "findings",
+            "bypasses",
+            "critical",
+            "high",
+            "medium",
+            "mode",
+            "error",
+        ]
+    )
     for r in results:
-        writer.writerow([
-            r.url, r.grade, r.score, r.num_findings, r.num_bypasses,
-            r.num_critical, r.num_high, r.num_medium, r.policy_mode,
-            r.error or "",
-        ])
+        writer.writerow(
+            [
+                r.url,
+                r.grade,
+                r.score,
+                r.num_findings,
+                r.num_bypasses,
+                r.num_critical,
+                r.num_high,
+                r.num_medium,
+                r.policy_mode,
+                r.error or "",
+            ]
+        )
     return output.getvalue()
 
 

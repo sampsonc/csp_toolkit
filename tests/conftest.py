@@ -26,9 +26,7 @@ SAMPLE_POLICIES = {
     "blob_uri": "script-src 'self' blob:",
     "empty": "",
     "report_only": "default-src 'self'; report-uri /csp-report",
-    "nonce_and_hash": (
-        "script-src 'nonce-r4nd0m' 'sha256-abc123def456' 'strict-dynamic'"
-    ),
+    "nonce_and_hash": ("script-src 'nonce-r4nd0m' 'sha256-abc123def456' 'strict-dynamic'"),
     "multiple_directives": (
         "default-src 'none'; "
         "script-src 'self' https://cdn.example.com; "

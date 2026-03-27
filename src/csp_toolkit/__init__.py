@@ -1,5 +1,6 @@
 """CSP Toolkit — Parse, analyze, generate, and find bypasses in Content Security Policy headers."""
 
+from ._version import __version__
 from .analyzer import analyze, analyze_header, score_policy
 from .bypass import check_domain_gadgets, check_domain_jsonp, find_bypasses, probe_jsonp_endpoint
 from .diff import PolicyDiff, diff_headers, diff_policies
@@ -11,6 +12,7 @@ from .parser import parse, parse_meta
 from .probes import (
     HeaderInjectionResult,
     NonceReuseResult,
+    NonceReuseStatus,
     ReportUriResult,
     analyze_report_uri,
     check_header_injection,
@@ -21,6 +23,7 @@ from .subdomain import SubdomainResult, check_subdomains
 from .tracker import EvolutionAlert, Snapshot, check_evolution, take_snapshot
 
 __all__ = [
+    "__version__",
     "analyze",
     "analyze_header",
     "analyze_report_uri",
@@ -44,6 +47,7 @@ __all__ = [
     "generate_csp",
     "HeaderInjectionResult",
     "NonceReuseResult",
+    "NonceReuseStatus",
     "parse",
     "parse_meta",
     "probe_jsonp_endpoint",

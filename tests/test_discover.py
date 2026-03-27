@@ -62,7 +62,10 @@ HTML_WITH_DATA_URIS = """
 
 class TestExtractOrigin:
     def test_external_url(self):
-        assert _extract_origin("https://cdn.example.com/app.js", "https://example.com/") == "https://cdn.example.com"
+        assert (
+            _extract_origin("https://cdn.example.com/app.js", "https://example.com/")
+            == "https://cdn.example.com"
+        )
 
     def test_same_origin_returns_none(self):
         assert _extract_origin("https://example.com/app.js", "https://example.com/") is None
@@ -71,7 +74,10 @@ class TestExtractOrigin:
         assert _extract_origin("/app.js", "https://example.com/") is None
 
     def test_protocol_relative(self):
-        assert _extract_origin("//cdn.example.com/app.js", "https://example.com/") == "https://cdn.example.com"
+        assert (
+            _extract_origin("//cdn.example.com/app.js", "https://example.com/")
+            == "https://cdn.example.com"
+        )
 
     def test_data_uri(self):
         assert _extract_origin("data:image/png;base64,abc", "https://example.com/") == "data:"
@@ -83,10 +89,16 @@ class TestExtractOrigin:
         assert _extract_origin("", "https://example.com/") is None
 
     def test_port_in_origin(self):
-        assert _extract_origin("https://api.example.com:8080/path", "https://example.com/") == "https://api.example.com:8080"
+        assert (
+            _extract_origin("https://api.example.com:8080/path", "https://example.com/")
+            == "https://api.example.com:8080"
+        )
 
     def test_standard_port_omitted(self):
-        assert _extract_origin("https://cdn.example.com:443/path", "https://example.com/") == "https://cdn.example.com"
+        assert (
+            _extract_origin("https://cdn.example.com:443/path", "https://example.com/")
+            == "https://cdn.example.com"
+        )
 
 
 class TestExtractResourcesFromHtml:

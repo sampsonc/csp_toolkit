@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "csp-toolkit"
-version = "0.3.0"
+version = "0.4.0"
 description = "Parse, analyze, generate, and find bypasses in Content Security Policy headers"
 readme = "README.md"
 license = "MIT"
