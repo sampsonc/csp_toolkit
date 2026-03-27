@@ -638,11 +638,13 @@ def report_uri_cmd(csp: str | None, file_path: str | None, fetch_url: str | None
 @click.option("--depth", "-d", type=int, default=0, help="Crawl depth (0=single page, 1+=follow same-origin links)")
 @click.option("--max-pages", type=int, default=50, help="Maximum pages to crawl")
 @click.option("--format", "-o", "fmt", type=click.Choice(["header", "nginx", "apache", "meta", "json"]), default="header")
-@click.option("--nonce", help="Use nonce instead of unsafe-inline for inline scripts/styles")
+@click.option("--nonce", help="Use a specific nonce for inline scripts/styles")
+@click.option("--auto-nonce", is_flag=True, help="Generate a nonce automatically and show which tags need it")
+@click.option("--hash", "use_hashes", is_flag=True, help="Use SHA-256 hashes for inline scripts/styles (most secure)")
 @click.option("--analyze/--no-analyze", "do_analyze", default=False, help="Run analyzer on the generated CSP")
 @click.option("--no-verify-ssl", is_flag=True, help="Skip SSL certificate verification")
 @click.option("--timeout", type=float, default=10.0)
-def auto(url: str, depth: int, max_pages: int, fmt: str, nonce: str | None, do_analyze: bool, no_verify_ssl: bool, timeout: float):
+def auto(url: str, depth: int, max_pages: int, fmt: str, nonce: str | None, auto_nonce: bool, use_hashes: bool, do_analyze: bool, no_verify_ssl: bool, timeout: float):
     """Auto-generate a CSP by crawling a website and discovering its resources.
 
     Fetches the page (and optionally follows links), finds all scripts, styles,
@@ -678,7 +680,7 @@ def auto(url: str, depth: int, max_pages: int, fmt: str, nonce: str | None, do_a
     _print_origins("manifest-src", resources.manifest_origins)
 
     # Generate CSP
-    builder = generate_csp(resources, nonce=nonce)
+    builder = generate_csp(resources, nonce=nonce, use_hashes=use_hashes, auto_nonce=auto_nonce)
     console.print()
 
     if fmt == "json":
@@ -698,13 +700,38 @@ def auto(url: str, depth: int, max_pages: int, fmt: str, nonce: str | None, do_a
         console.print("[bold]Generated CSP:[/bold]")
         click.echo(formatters[fmt]())
 
-    # Inline script/style warnings
-    if resources.has_inline_scripts and not nonce:
+    # Show inline content details when using hashes or nonces
+    if use_hashes and (resources.inline_scripts or resources.inline_styles):
+        console.print("\n[bold]Inline content hashes:[/bold]")
+        for ic in resources.inline_scripts:
+            preview = ic.content.strip()[:60].replace("\n", " ")
+            console.print(f"  [cyan]<script>[/cyan] {ic.sha256}")
+            console.print(f"    [dim]{preview}...[/dim]")
+        for ic in resources.inline_styles:
+            preview = ic.content.strip()[:60].replace("\n", " ")
+            console.print(f"  [cyan]<style>[/cyan] {ic.sha256}")
+            console.print(f"    [dim]{preview}...[/dim]")
+        if resources.has_inline_style_attrs:
+            console.print("\n[yellow]Note: Inline style= attributes found. These cannot use hashes — 'unsafe-hashes' was added.[/yellow]")
+
+    if (auto_nonce or nonce) and (resources.inline_scripts or resources.inline_styles):
+        nonce_val = resources.inline_scripts[0].nonce if resources.inline_scripts else (resources.inline_styles[0].nonce if resources.inline_styles else None)
+        if nonce_val:
+            console.print(f"\n[bold]Nonce value:[/bold] {nonce_val}")
+            console.print("[bold]Add this attribute to your inline tags:[/bold]")
+            if resources.inline_scripts:
+                console.print(f'  [cyan]<script nonce="{nonce_val}">[/cyan] — {len(resources.inline_scripts)} inline script(s)')
+            if resources.inline_styles:
+                console.print(f'  [cyan]<style nonce="{nonce_val}">[/cyan] — {len(resources.inline_styles)} inline style(s)')
+
+    # Warnings when using unsafe-inline
+    using_unsafe = not nonce and not auto_nonce and not use_hashes
+    if resources.has_inline_scripts and using_unsafe:
         console.print("\n[yellow]Note: Inline scripts detected. 'unsafe-inline' was added to script-src.[/yellow]")
-        console.print("[yellow]For better security, use --nonce and add nonce attributes to your inline scripts.[/yellow]")
-    if (resources.has_inline_styles or resources.has_inline_style_attrs) and not nonce:
+        console.print("[yellow]For better security, use --auto-nonce, --nonce, or --hash.[/yellow]")
+    if (resources.has_inline_styles or resources.has_inline_style_attrs) and using_unsafe:
         console.print("\n[yellow]Note: Inline styles detected. 'unsafe-inline' was added to style-src.[/yellow]")
-        console.print("[yellow]For better security, use --nonce and add nonce attributes to your style tags.[/yellow]")
+        console.print("[yellow]For better security, use --auto-nonce, --nonce, or --hash.[/yellow]")
 
     # Optional analysis
     if do_analyze:

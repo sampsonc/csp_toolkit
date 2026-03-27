@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import secrets
 from collections import deque
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
@@ -10,6 +13,22 @@ import httpx
 from bs4 import BeautifulSoup
 
 from .generator import CSPBuilder
+
+
+def _sha256_hash(content: str) -> str:
+    """Compute a CSP-compatible SHA-256 hash for inline content."""
+    digest = hashlib.sha256(content.encode("utf-8")).digest()
+    return f"'sha256-{base64.b64encode(digest).decode('ascii')}'"
+
+
+@dataclass
+class InlineContent:
+    """Represents an inline script or style found on the page."""
+    tag: str  # "script" or "style"
+    content: str
+    sha256: str  # CSP-compatible hash: 'sha256-...'
+    page_url: str
+    nonce: str | None = None  # Assigned if auto-nonce is used
 
 
 @dataclass
@@ -29,6 +48,8 @@ class DiscoveredResources:
     has_inline_scripts: bool = False
     has_inline_styles: bool = False
     has_inline_style_attrs: bool = False
+    inline_scripts: list[InlineContent] = field(default_factory=list)
+    inline_styles: list[InlineContent] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -47,6 +68,14 @@ class DiscoveredResources:
             "has_inline_scripts": self.has_inline_scripts,
             "has_inline_styles": self.has_inline_styles,
             "has_inline_style_attrs": self.has_inline_style_attrs,
+            "inline_scripts": [
+                {"sha256": ic.sha256, "nonce": ic.nonce, "content_preview": ic.content[:80]}
+                for ic in self.inline_scripts
+            ],
+            "inline_styles": [
+                {"sha256": ic.sha256, "nonce": ic.nonce, "content_preview": ic.content[:80]}
+                for ic in self.inline_styles
+            ],
         }
 
 
@@ -111,6 +140,13 @@ def _extract_resources_from_html(
             _add_origin(resources.script_origins, src, page_url)
         elif tag.string and tag.string.strip():
             resources.has_inline_scripts = True
+            content = tag.string
+            resources.inline_scripts.append(InlineContent(
+                tag="script",
+                content=content,
+                sha256=_sha256_hash(content),
+                page_url=page_url,
+            ))
 
     # Stylesheets
     for tag in soup.find_all("link", rel=lambda r: r and "stylesheet" in r):
@@ -119,8 +155,16 @@ def _extract_resources_from_html(
             _add_origin(resources.style_origins, href, page_url)
 
     # Inline styles
-    if soup.find_all("style"):
-        resources.has_inline_styles = True
+    for style_tag in soup.find_all("style"):
+        if style_tag.string and style_tag.string.strip():
+            resources.has_inline_styles = True
+            content = style_tag.string
+            resources.inline_styles.append(InlineContent(
+                tag="style",
+                content=content,
+                sha256=_sha256_hash(content),
+                page_url=page_url,
+            ))
 
     # Inline style attributes
     if soup.find(attrs={"style": True}):
@@ -283,8 +327,20 @@ def generate_csp(
     resources: DiscoveredResources,
     *,
     nonce: str | None = None,
+    use_hashes: bool = False,
+    auto_nonce: bool = False,
 ) -> CSPBuilder:
     """Generate a CSP policy based on discovered resources.
+
+    Args:
+        resources: Discovered resources from crawling.
+        nonce: A specific nonce to use for inline scripts/styles.
+        use_hashes: If True, use SHA-256 hashes for each inline script/style
+                    instead of 'unsafe-inline'. Most secure but requires the
+                    inline content to never change.
+        auto_nonce: If True, generate a unique nonce for each inline script/style
+                    and assign it to the InlineContent objects. The caller can then
+                    read the nonces to add nonce attributes to the HTML tags.
 
     Returns a CSPBuilder that can output header/nginx/apache/meta formats.
     """
@@ -293,21 +349,44 @@ def generate_csp(
     # default-src 'none' — restrictive base
     builder.add_directive("default-src", "'none'")
 
-    # script-src
+    # Handle inline script policy
     script_sources = ["'self'"]
     if resources.has_inline_scripts:
-        if nonce:
+        if use_hashes:
+            for ic in resources.inline_scripts:
+                script_sources.append(ic.sha256)
+        elif auto_nonce:
+            nonce_val = secrets.token_urlsafe(16)
+            script_sources.append(f"'nonce-{nonce_val}'")
+            for ic in resources.inline_scripts:
+                ic.nonce = nonce_val
+        elif nonce:
             script_sources.append(f"'nonce-{nonce}'")
+            for ic in resources.inline_scripts:
+                ic.nonce = nonce
         else:
             script_sources.append("'unsafe-inline'")
     script_sources.extend(sorted(resources.script_origins))
     builder.add_directive("script-src", *script_sources)
 
-    # style-src
+    # Handle inline style policy
     style_sources = ["'self'"]
     if resources.has_inline_styles or resources.has_inline_style_attrs:
-        if nonce:
+        if use_hashes and resources.inline_styles:
+            for ic in resources.inline_styles:
+                style_sources.append(ic.sha256)
+            if resources.has_inline_style_attrs:
+                # Can't hash inline style attributes — need unsafe-hashes or unsafe-inline
+                style_sources.append("'unsafe-hashes'")
+        elif auto_nonce:
+            nonce_val = secrets.token_urlsafe(16)
+            style_sources.append(f"'nonce-{nonce_val}'")
+            for ic in resources.inline_styles:
+                ic.nonce = nonce_val
+        elif nonce:
             style_sources.append(f"'nonce-{nonce}'")
+            for ic in resources.inline_styles:
+                ic.nonce = nonce
         else:
             style_sources.append("'unsafe-inline'")
     style_sources.extend(sorted(resources.style_origins))
