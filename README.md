@@ -350,6 +350,10 @@ cat flagged.txt | awk '{print $NF}' | sort -u | csp-toolkit scan -f - -o csv
 
 Use active probes (`fetch`, `scan`, `header-inject`, `nonce-check`, `bypass --check-live`, etc.) only against systems you are **authorized** to test.
 
+Release history: [CHANGELOG.md](CHANGELOG.md). Security reporting and dependency notes: [SECURITY.md](SECURITY.md).
+
+Pushing a tag `v*` runs [`.github/workflows/publish.yml`](.github/workflows/publish.yml) (tests, then PyPI upload via [trusted publishing](https://docs.pypi.org/trusted-publishers/)). Configure the publisher once under [PyPI → csp-toolkit → Publishing](https://pypi.org/manage/project/csp-toolkit/settings/publishing/).
+
 ```bash
 # Install dev dependencies
 uv sync --all-extras
