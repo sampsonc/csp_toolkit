@@ -1,0 +1,93 @@
+{
+  "accounts.google.com": [
+    {"path": "/o/oauth2/revoke?callback=CALLBACK", "notes": "Google OAuth JSONP revoke endpoint"}
+  ],
+  "ajax.googleapis.com": [
+    {"path": "/ajax/libs/angularjs/1.5.8/angular.min.js", "notes": "Hosts AngularJS (script gadget, not JSONP)"}
+  ],
+  "maps.googleapis.com": [
+    {"path": "/maps/api/js?callback=CALLBACK", "notes": "Google Maps API JSONP"}
+  ],
+  "www.google.com": [
+    {"path": "/complete/search?client=chrome&q=test&callback=CALLBACK", "notes": "Google Autocomplete JSONP"},
+    {"path": "/jsapi?callback=CALLBACK", "notes": "Google JS API loader"}
+  ],
+  "clients1.google.com": [
+    {"path": "/complete/search?client=chrome&q=test&callback=CALLBACK", "notes": "Google search autocomplete"}
+  ],
+  "cse.google.com": [
+    {"path": "/cse.js?cx=CSEID&callback=CALLBACK", "notes": "Google Custom Search JSONP"}
+  ],
+  "translate.googleapis.com": [
+    {"path": "/translate_a/l?client=dict-chrome-ex&callback=CALLBACK", "notes": "Google Translate JSONP"}
+  ],
+  "www.googleapis.com": [
+    {"path": "/customsearch/v1?callback=CALLBACK", "notes": "Google Custom Search API"}
+  ],
+  "subdomain.googleapis.com": [
+    {"path": "/various?callback=CALLBACK", "notes": "Multiple googleapis subdomains serve JSONP"}
+  ],
+  "graph.facebook.com": [
+    {"path": "/me?callback=CALLBACK", "notes": "Facebook Graph API JSONP (requires token)"}
+  ],
+  "cdn.syndication.twimg.com": [
+    {"path": "/timeline/profile?callback=CALLBACK&screen_name=twitter", "notes": "Twitter syndication JSONP"}
+  ],
+  "api.twitter.com": [
+    {"path": "/1/urls/count.json?url=http://example.com&callback=CALLBACK", "notes": "Twitter URL count (deprecated but may work)"}
+  ],
+  "platform.twitter.com": [
+    {"path": "/widgets.js", "notes": "Twitter widgets — hosts controllable JS"}
+  ],
+  "search.yahoo.com": [
+    {"path": "/sugg/gossip/gossip-us-ura/?output=sd1&appid=search&nresults=5&command=test&callback=CALLBACK", "notes": "Yahoo search suggestions JSONP"}
+  ],
+  "uss.yahoo.com": [
+    {"path": "/gossip-us-east?output=json&command=test&callback=CALLBACK", "notes": "Yahoo UGC suggestions"}
+  ],
+  "api.flickr.com": [
+    {"path": "/services/feeds/photos_public.gne?format=json&jsoncallback=CALLBACK", "notes": "Flickr public feed JSONP"}
+  ],
+  "gdata.youtube.com": [
+    {"path": "/feeds/api/videos?v=2&alt=json-in-script&callback=CALLBACK", "notes": "YouTube GData API (legacy)"}
+  ],
+  "www.youtube.com": [
+    {"path": "/oembed?url=http://www.youtube.com/watch?v=dQw4w9WgXcQ&format=json&callback=CALLBACK", "notes": "YouTube oEmbed JSONP"}
+  ],
+  "platform.linkedin.com": [
+    {"path": "/in.js", "notes": "LinkedIn platform JS — potential gadget"}
+  ],
+  "www.linkedin.com": [
+    {"path": "/countserv/count/share?url=http://example.com&callback=CALLBACK", "notes": "LinkedIn share count JSONP"}
+  ],
+  "api.instagram.com": [
+    {"path": "/oembed?url=https://instagram.com/p/xxx&callback=CALLBACK", "notes": "Instagram oEmbed JSONP (may require auth)"}
+  ],
+  "connect.facebook.net": [
+    {"path": "/en_US/sdk.js", "notes": "Facebook SDK — potential gadget for SDK callback abuse"}
+  ],
+  "widgets.pinterest.com": [
+    {"path": "/v1/urls/count.json?url=http://example.com&callback=CALLBACK", "notes": "Pinterest count JSONP"}
+  ],
+  "api.github.com": [
+    {"path": "/?callback=CALLBACK", "notes": "GitHub API JSONP support"}
+  ],
+  "noembed.com": [
+    {"path": "/embed?url=http://youtube.com/watch?v=xxx&callback=CALLBACK", "notes": "NoEmbed oEmbed proxy JSONP"}
+  ],
+  "tiles.pinterest.com": [
+    {"path": "/v3/pidgets/boards/pins/?callback=CALLBACK", "notes": "Pinterest tiles JSONP"}
+  ],
+  "en.wikipedia.org": [
+    {"path": "/w/api.php?action=opensearch&format=json&callback=CALLBACK&search=test", "notes": "Wikipedia API JSONP"}
+  ],
+  "login.microsoftonline.com": [
+    {"path": "/common/userrealm/?user=test@test.com&checkForMicrosoftAccount=true&api-version=2.0&json_callback=CALLBACK", "notes": "Microsoft Azure AD user realm"}
+  ],
+  "api.foursquare.com": [
+    {"path": "/v2/venues/search?callback=CALLBACK", "notes": "Foursquare venues JSONP"}
+  ],
+  "api.openstreetmap.org": [
+    {"path": "/api/0.6/notes/search.json?q=test&callback=CALLBACK", "notes": "OpenStreetMap notes JSONP"}
+  ]
+}

