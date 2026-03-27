@@ -1,0 +1,28 @@
+id: csp-broad-cdn-whitelist
+
+info:
+  name: CSP Whitelists Broad CDN/Cloud Domains in script-src
+  author: csp-toolkit
+  severity: medium
+  description: |
+    The Content-Security-Policy header whitelists broad wildcard domains
+    (*.googleapis.com, *.cloudflare.com, *.amazonaws.com, etc.) in script-src.
+    These domains host JSONP endpoints and attacker-controllable content that
+    can be used to bypass CSP.
+  tags: csp,misconfig,bypass
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: regex
+        part: header
+        regex:
+          - "(?i)content-security-policy:.*(?:script-src|default-src)[^;]*\\*\\.(googleapis|gstatic|google|cloudflare|amazonaws|azurewebsites|herokuapp|firebaseapp|cloudfront|akamaihd)\\."

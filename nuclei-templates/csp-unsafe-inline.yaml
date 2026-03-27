@@ -1,0 +1,29 @@
+id: csp-unsafe-inline
+
+info:
+  name: CSP Contains unsafe-inline in script-src
+  author: csp-toolkit
+  severity: high
+  description: |
+    The Content-Security-Policy header contains 'unsafe-inline' in script-src
+    (or default-src fallback), which allows execution of arbitrary inline
+    scripts and completely undermines CSP's XSS protection.
+  reference:
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/script-src
+  tags: csp,misconfig,xss
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: regex
+        part: header
+        regex:
+          - "(?i)content-security-policy:.*(?:script-src|default-src)[^;]*'unsafe-inline'"

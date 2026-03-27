@@ -1,0 +1,31 @@
+id: csp-header-missing
+
+info:
+  name: Missing Content-Security-Policy Header
+  author: csp-toolkit
+  severity: medium
+  description: |
+    The target does not set a Content-Security-Policy header, leaving the page
+    unprotected against XSS, clickjacking, and other injection attacks.
+  reference:
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP
+  tags: csp,misconfig,header
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+      - type: word
+        part: header
+        words:
+          - "content-security-policy"
+        negative: true

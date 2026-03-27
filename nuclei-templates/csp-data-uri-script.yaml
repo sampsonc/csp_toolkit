@@ -1,0 +1,27 @@
+id: csp-data-uri-script-src
+
+info:
+  name: CSP Allows data: URI in script-src
+  author: csp-toolkit
+  severity: critical
+  description: |
+    The Content-Security-Policy header allows data: URIs in script-src,
+    enabling trivial XSS via data:text/javascript payloads.
+    Example: <script src="data:text/javascript,alert(document.domain)"></script>
+  tags: csp,misconfig,xss
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: regex
+        part: header
+        regex:
+          - "(?i)content-security-policy:.*(?:script-src|default-src)[^;]*data:"

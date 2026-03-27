@@ -1,0 +1,33 @@
+id: csp-missing-base-uri
+
+info:
+  name: CSP Missing base-uri Directive
+  author: csp-toolkit
+  severity: medium
+  description: |
+    The Content-Security-Policy header does not include base-uri. An attacker
+    who can inject HTML can use a <base> tag to redirect all relative URL
+    loads to an attacker-controlled server.
+  tags: csp,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "content-security-policy"
+
+      - type: word
+        part: header
+        words:
+          - "base-uri"
+        negative: true

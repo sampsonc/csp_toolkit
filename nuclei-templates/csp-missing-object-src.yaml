@@ -1,0 +1,39 @@
+id: csp-missing-object-src
+
+info:
+  name: CSP Missing object-src Directive
+  author: csp-toolkit
+  severity: medium
+  description: |
+    The Content-Security-Policy header does not include object-src (and it is
+    not covered by default-src 'none'). This allows loading plugins via
+    <object>, <embed>, and <applet> elements from any origin.
+  tags: csp,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "content-security-policy"
+
+      - type: word
+        part: header
+        words:
+          - "object-src"
+        negative: true
+
+      - type: regex
+        part: header
+        regex:
+          - "(?i)content-security-policy:.*default-src\\s+'none'"
+        negative: true

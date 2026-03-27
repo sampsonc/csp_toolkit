@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate CSP Toolkit Icons</title></head>
+<body>
+<p>Open this file in a browser, right-click each canvas and "Save image as" to create the icon PNGs.</p>
+<div id="icons"></div>
+<script>
+const sizes = [16, 48, 128];
+const container = document.getElementById("icons");
+
+for (const size of sizes) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+
+  // Background
+  const r = size * 0.15;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, r);
+  ctx.fillStyle = "#18181b";
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = "#3f3f46";
+  ctx.lineWidth = size > 32 ? 2 : 1;
+  ctx.stroke();
+
+  // Shield shape
+  const cx = size / 2;
+  const top = size * 0.12;
+  const bot = size * 0.85;
+  const mid = size * 0.55;
+  const w = size * 0.35;
+
+  ctx.beginPath();
+  ctx.moveTo(cx, top);
+  ctx.lineTo(cx + w, size * 0.25);
+  ctx.lineTo(cx + w, mid);
+  ctx.quadraticCurveTo(cx + w, bot, cx, bot);
+  ctx.quadraticCurveTo(cx - w, bot, cx - w, mid);
+  ctx.lineTo(cx - w, size * 0.25);
+  ctx.closePath();
+  ctx.fillStyle = "#22c55e";
+  ctx.fill();
+
+  // CSP text
+  ctx.fillStyle = "#fff";
+  ctx.font = `bold ${size * 0.22}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("CSP", cx, size * 0.52);
+
+  const label = document.createElement("div");
+  label.style.marginBottom = "16px";
+  label.innerHTML = `<strong>icon${size}.png</strong><br>`;
+  label.appendChild(canvas);
+  container.appendChild(label);
+}
+</script>
+</body>
+</html>

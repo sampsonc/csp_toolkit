@@ -1,0 +1,33 @@
+id: csp-report-only
+
+info:
+  name: CSP is Report-Only (Not Enforced)
+  author: csp-toolkit
+  severity: info
+  description: |
+    The target uses Content-Security-Policy-Report-Only instead of
+    Content-Security-Policy. Violations are logged but not blocked,
+    providing no actual protection.
+  tags: csp,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "content-security-policy-report-only"
+
+      - type: word
+        part: header
+        words:
+          - "content-security-policy:"
+        negative: true

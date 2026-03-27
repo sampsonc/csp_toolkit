@@ -1,0 +1,28 @@
+id: csp-https-scheme-script-src
+
+info:
+  name: CSP Allows https: Scheme in script-src
+  author: csp-toolkit
+  severity: high
+  description: |
+    The Content-Security-Policy header allows the https: scheme in script-src,
+    which permits loading scripts from any HTTPS origin. This is nearly as
+    permissive as a wildcard — any attacker-controlled HTTPS domain can
+    serve malicious scripts.
+  tags: csp,misconfig,xss
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: regex
+        part: header
+        regex:
+          - "(?i)content-security-policy:.*(?:script-src|default-src)[^;]*\\bhttps:"

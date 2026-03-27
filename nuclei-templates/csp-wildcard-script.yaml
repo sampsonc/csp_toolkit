@@ -1,0 +1,27 @@
+id: csp-wildcard-script-src
+
+info:
+  name: CSP Contains Wildcard in script-src
+  author: csp-toolkit
+  severity: high
+  description: |
+    The Content-Security-Policy header contains a wildcard (*) in script-src,
+    which allows loading scripts from any origin. This is equivalent to having
+    no CSP script protection at all.
+  tags: csp,misconfig,xss
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: regex
+        part: header
+        regex:
+          - "(?i)content-security-policy:.*script-src[^;]*\\*"

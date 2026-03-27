@@ -1,0 +1,30 @@
+id: csp-unsafe-eval
+
+info:
+  name: CSP Contains unsafe-eval in script-src
+  author: csp-toolkit
+  severity: medium
+  description: |
+    The Content-Security-Policy header contains 'unsafe-eval' in script-src,
+    which allows eval(), Function(), setTimeout(string), and setInterval(string).
+    If an attacker controls a string passed to any of these, they can execute
+    arbitrary JavaScript.
+  reference:
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/script-src
+  tags: csp,misconfig,xss
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: regex
+        part: header
+        regex:
+          - "(?i)content-security-policy:.*(?:script-src|default-src)[^;]*'unsafe-eval'"
