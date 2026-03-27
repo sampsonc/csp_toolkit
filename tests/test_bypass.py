@@ -1,13 +1,15 @@
 """Tests for CSP bypass finder."""
 
 from csp_toolkit.bypass import (
+    _verify_live_endpoints,
     check_domain_gadgets,
     check_domain_jsonp,
     find_bypasses,
     find_bypasses_header,
+    probe_jsonp_endpoint,
     _domain_matches,
 )
-from csp_toolkit.models import Severity
+from csp_toolkit.models import Finding, Severity
 from csp_toolkit.parser import parse
 
 
@@ -199,3 +201,31 @@ class TestCombinedPolicy:
         assert "blob_uri" in bypass_types
         assert "cdn_gadget" in bypass_types
         assert "jsonp" in bypass_types
+
+
+class TestVerifyLiveEndpoints:
+    def test_non_jsonp_findings_passed_through(self):
+        findings = [
+            Finding(severity=Severity.CRITICAL, title="data: bypass", description="...", bypass_type="data_uri"),
+            Finding(severity=Severity.MEDIUM, title="base tag", description="...", bypass_type="base_uri"),
+        ]
+        result = _verify_live_endpoints(findings)
+        assert len(result) == 2
+        # Non-JSONP findings should be unchanged
+        assert result[0].title == "data: bypass"
+        assert result[1].title == "base tag"
+
+    def test_jsonp_findings_get_annotated(self):
+        findings = [
+            Finding(
+                severity=Severity.HIGH,
+                title="JSONP bypass via example.com",
+                description="payload: https://example.com/jsonp?callback=alert(document.domain)//",
+                bypass_type="jsonp",
+                directive="script-src",
+            ),
+        ]
+        # With a very short timeout, the endpoint won't be reachable
+        result = _verify_live_endpoints(findings, timeout=0.1)
+        assert len(result) == 1
+        assert "[UNVERIFIED]" in result[0].title or "[LIVE]" in result[0].title

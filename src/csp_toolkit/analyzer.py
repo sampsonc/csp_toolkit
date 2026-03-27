@@ -26,10 +26,13 @@ def analyze(policy: Policy) -> list[Finding]:
         _check_unsafe_hashes,
         _check_unsafe_inline_style,
         _check_strict_dynamic_without_nonce_hash,
+        _check_https_scheme_script,
         _check_report_only,
         _check_http_sources,
         _check_ip_address_sources,
         _check_data_uri_in_non_script,
+        _check_missing_trusted_types,
+        _check_missing_navigate_to,
     ]
 
     findings: list[Finding] = []
@@ -50,6 +53,40 @@ def analyze(policy: Policy) -> list[Finding]:
 def analyze_header(header: str, report_only: bool = False) -> list[Finding]:
     """Convenience: parse a raw CSP header string and analyze it."""
     return analyze(parse(header, report_only=report_only))
+
+
+_SEVERITY_WEIGHTS = {
+    Severity.CRITICAL: 30,
+    Severity.HIGH: 15,
+    Severity.MEDIUM: 5,
+    Severity.LOW: 2,
+    Severity.INFO: 0,
+}
+
+
+def score_policy(policy: Policy) -> tuple[str, int]:
+    """Score a policy and return a letter grade (A+ to F) and numeric score (0-100).
+
+    100 = perfect (no findings), deducted by severity-weighted findings.
+    """
+    findings = analyze(policy)
+    penalty = sum(_SEVERITY_WEIGHTS[f.severity] for f in findings)
+    numeric = max(0, 100 - penalty)
+
+    if numeric >= 95:
+        grade = "A+"
+    elif numeric >= 90:
+        grade = "A"
+    elif numeric >= 80:
+        grade = "B"
+    elif numeric >= 70:
+        grade = "C"
+    elif numeric >= 50:
+        grade = "D"
+    else:
+        grade = "F"
+
+    return grade, numeric
 
 
 # --- Individual checks ---
@@ -413,3 +450,54 @@ def _check_data_uri_in_non_script(policy: Policy) -> list[Finding]:
                 directive=name,
             ))
     return findings
+
+
+def _check_https_scheme_script(policy: Policy) -> list[Finding]:
+    """https: scheme in script-src allows loading scripts from any HTTPS origin."""
+    sources = policy.effective_sources("script-src")
+    if any(s.raw.lower() == "https:" for s in sources):
+        return [Finding(
+            severity=Severity.HIGH,
+            title="https: scheme in script-src allows scripts from any HTTPS origin",
+            description=(
+                "The https: scheme source in script-src allows loading JavaScript from "
+                "any HTTPS origin. This is nearly as permissive as a wildcard — any "
+                "attacker-controlled HTTPS domain can serve malicious scripts."
+            ),
+            directive="script-src",
+        )]
+    return []
+
+
+def _check_missing_trusted_types(policy: Policy) -> list[Finding]:
+    """Missing require-trusted-types-for — no DOM XSS sink protection."""
+    if not policy.has_directive("require-trusted-types-for"):
+        return [Finding(
+            severity=Severity.INFO,
+            title="Missing require-trusted-types-for — no Trusted Types enforcement",
+            description=(
+                "Trusted Types prevent DOM XSS by requiring typed objects for dangerous "
+                "DOM sinks (innerHTML, eval, etc.). Adding "
+                "\"require-trusted-types-for 'script'\" enforces this protection. "
+                "Supported in Chromium-based browsers."
+            ),
+            references=["https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/require-trusted-types-for"],
+        )]
+    return []
+
+
+def _check_missing_navigate_to(policy: Policy) -> list[Finding]:
+    """Missing navigate-to — no navigation restrictions."""
+    if not policy.has_directive("navigate-to"):
+        return [Finding(
+            severity=Severity.INFO,
+            title="Missing navigate-to — page navigation is unrestricted",
+            description=(
+                "Without navigate-to, the page can navigate to any URL via links, "
+                "form submissions, window.location, or meta refresh. The navigate-to "
+                "directive restricts allowed navigation targets. Note: limited browser "
+                "support as of 2025."
+            ),
+            references=["https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/navigate-to"],
+        )]
+    return []

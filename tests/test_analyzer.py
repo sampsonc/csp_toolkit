@@ -1,6 +1,6 @@
 """Tests for CSP analyzer — one test per check, plus clean-policy negatives."""
 
-from csp_toolkit.analyzer import analyze, analyze_header
+from csp_toolkit.analyzer import analyze, analyze_header, score_policy
 from csp_toolkit.models import Severity
 from csp_toolkit.parser import parse
 
@@ -235,6 +235,83 @@ class TestDataUriNonScript:
         findings = analyze_header("script-src 'self'; frame-src data:")
         data_findings = [f for f in findings if "data:" in f.title.lower() and f.directive == "frame-src"]
         assert len(data_findings) >= 1
+
+
+class TestHttpsSchemeScript:
+    def test_triggers(self):
+        findings = analyze_header("script-src 'self' https:")
+        https_findings = [f for f in findings if "https:" in f.title.lower() and "any https" in f.description.lower()]
+        assert len(https_findings) >= 1
+        assert https_findings[0].severity == Severity.HIGH
+
+    def test_not_triggered_without(self):
+        findings = analyze_header("script-src 'self'")
+        https_findings = [f for f in findings if "https: scheme in script-src" in f.title.lower()]
+        assert https_findings == []
+
+
+class TestMissingTrustedTypes:
+    def test_triggers(self):
+        findings = analyze_header("script-src 'self'")
+        tt = [f for f in findings if "trusted types" in f.title.lower()]
+        assert len(tt) == 1
+        assert tt[0].severity == Severity.INFO
+
+    def test_not_triggered_when_present(self):
+        findings = analyze_header("script-src 'self'; require-trusted-types-for 'script'")
+        tt = [f for f in findings if "trusted types" in f.title.lower()]
+        assert tt == []
+
+
+class TestMissingNavigateTo:
+    def test_triggers(self):
+        findings = analyze_header("script-src 'self'")
+        nav = [f for f in findings if "navigate-to" in f.title.lower()]
+        assert len(nav) == 1
+        assert nav[0].severity == Severity.INFO
+
+    def test_not_triggered_when_present(self):
+        findings = analyze_header("script-src 'self'; navigate-to 'self'")
+        nav = [f for f in findings if "navigate-to" in f.title.lower()]
+        assert nav == []
+
+
+class TestScorePolicy:
+    def test_strict_policy_high_score(self):
+        p = parse(
+            "default-src 'none'; "
+            "script-src 'nonce-abc123' 'strict-dynamic'; "
+            "style-src 'nonce-abc123'; "
+            "img-src 'self'; font-src 'self'; connect-src 'self'; "
+            "base-uri 'none'; form-action 'self'; "
+            "frame-ancestors 'none'; object-src 'none'; "
+            "require-trusted-types-for 'script'; navigate-to 'self'"
+        )
+        grade, score = score_policy(p)
+        assert grade in ("A+", "A")
+        assert score >= 90
+
+    def test_weak_policy_low_score(self):
+        p = parse("script-src 'self' 'unsafe-inline' 'unsafe-eval' *")
+        grade, score = score_policy(p)
+        assert grade in ("D", "F")
+        assert score < 50
+
+    def test_empty_policy_perfect(self):
+        p = parse("")
+        grade, score = score_policy(p)
+        assert grade == "A+"
+        assert score == 100
+
+    def test_moderate_policy_mid_score(self):
+        p = parse(
+            "default-src 'self'; script-src 'self'; "
+            "object-src 'none'; base-uri 'self'; "
+            "form-action 'self'; frame-ancestors 'self'"
+        )
+        grade, score = score_policy(p)
+        assert grade in ("A+", "A", "B", "C")  # Decent policy, mostly INFO findings
+        assert score >= 70
 
 
 class TestSortOrder:

@@ -1,7 +1,7 @@
 """CSP Toolkit — Parse, analyze, generate, and find bypasses in Content Security Policy headers."""
 
-from .analyzer import analyze, analyze_header
-from .bypass import check_domain_gadgets, check_domain_jsonp, find_bypasses
+from .analyzer import analyze, analyze_header, score_policy
+from .bypass import check_domain_gadgets, check_domain_jsonp, find_bypasses, probe_jsonp_endpoint
 from .fetcher import FetchResult, fetch_csp
 from .generator import CSPBuilder
 from .models import Directive, Finding, Policy, Severity, Source, SourceType
@@ -20,7 +20,9 @@ __all__ = [
     "Finding",
     "parse",
     "parse_meta",
+    "probe_jsonp_endpoint",
     "Policy",
+    "score_policy",
     "Severity",
     "Source",
     "SourceType",

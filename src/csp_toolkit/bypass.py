@@ -6,6 +6,8 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
+import httpx
+
 from .models import Finding, Policy, Severity, SourceType
 from .parser import parse
 
@@ -30,8 +32,14 @@ def _load_bypass_patterns() -> dict:
         return json.load(f)
 
 
-def find_bypasses(policy: Policy) -> list[Finding]:
-    """Enumerate potential CSP bypasses for a given policy."""
+def find_bypasses(policy: Policy, *, check_live: bool = False, timeout: float = 5.0) -> list[Finding]:
+    """Enumerate potential CSP bypasses for a given policy.
+
+    Args:
+        policy: The parsed CSP policy to check.
+        check_live: If True, probe JSONP endpoints to verify they are live.
+        timeout: HTTP timeout for live checks (seconds).
+    """
     if not policy.directives:
         return []
 
@@ -44,12 +52,16 @@ def find_bypasses(policy: Policy) -> list[Finding]:
     findings.extend(_check_form_action_bypass(policy))
     findings.extend(_check_unsafe_inline_csp2_bypass(policy))
     findings.extend(_check_arbitrary_hosting_bypass(policy))
+
+    if check_live:
+        findings = _verify_live_endpoints(findings, timeout=timeout)
+
     return findings
 
 
-def find_bypasses_header(header: str) -> list[Finding]:
+def find_bypasses_header(header: str, *, check_live: bool = False) -> list[Finding]:
     """Convenience: parse a raw CSP header and find bypasses."""
-    return find_bypasses(parse(header))
+    return find_bypasses(parse(header), check_live=check_live)
 
 
 def check_domain_jsonp(domain: str) -> list[dict]:
@@ -94,8 +106,13 @@ def _domain_matches(source_host: str, db_domain: str) -> bool:
         if db_lower == base or db_lower.endswith("." + base):
             return True
 
-    # Exact source matches wildcard db entry (source maps.googleapis.com, db *.googleapis.com)
-    # Not needed — we match source against db keys, not the other way around
+    # Exact source matches db domain that is a parent — e.g. source "maps.googleapis.com"
+    # should match db key "maps.googleapis.com" (handled above) but also we should check
+    # if source is a subdomain of a broader wildcard pattern in our matching logic.
+    # This is handled by the caller iterating all db keys.
+
+    # Broader match: source "googleapis.com" covers db "maps.googleapis.com"
+    # (unlikely in practice but correct)
 
     return False
 
@@ -334,3 +351,69 @@ def _check_arbitrary_hosting_bypass(policy: Policy) -> list[Finding]:
                     break
 
     return findings
+
+
+def probe_jsonp_endpoint(url: str, *, timeout: float = 5.0) -> bool:
+    """Probe a JSONP endpoint to check if it responds with executable JS.
+
+    Returns True if the endpoint appears to reflect the callback parameter.
+    """
+    try:
+        resp = httpx.get(url, timeout=timeout, follow_redirects=True)
+        content_type = resp.headers.get("content-type", "")
+        body = resp.text[:500]
+        # Check if callback was reflected — look for our marker in the response
+        if resp.status_code == 200 and ("cspProbe" in body or "javascript" in content_type.lower()):
+            return True
+    except (httpx.HTTPError, httpx.TimeoutException):
+        pass
+    return False
+
+
+def _verify_live_endpoints(findings: list[Finding], *, timeout: float = 5.0) -> list[Finding]:
+    """Filter JSONP findings by probing endpoints to see if they are live.
+
+    Non-JSONP findings are passed through unchanged. JSONP findings are annotated
+    with [LIVE] or [UNVERIFIED] in the title.
+    """
+    verified: list[Finding] = []
+
+    for f in findings:
+        if f.bypass_type != "jsonp":
+            verified.append(f)
+            continue
+
+        # Extract the domain and path from the description to build a probe URL
+        # The description contains the payload URL — extract and probe it
+        desc = f.description
+        probe_url = None
+
+        # Look for the JSONP URL pattern in the description
+        if "https://" in desc:
+            start = desc.index("https://")
+            end = desc.find("'", start)
+            if end == -1:
+                end = desc.find("<", start)
+            if end == -1:
+                end = desc.find("\n", start)
+            if end > start:
+                probe_url = desc[start:end]
+                # Replace alert payload with a safe probe marker
+                probe_url = probe_url.replace("alert(document.domain)//", "cspProbe//")
+
+        if probe_url:
+            is_live = probe_jsonp_endpoint(probe_url, timeout=timeout)
+            status = "[LIVE]" if is_live else "[UNVERIFIED]"
+        else:
+            status = "[UNVERIFIED]"
+
+        verified.append(Finding(
+            severity=f.severity,
+            title=f"{status} {f.title}",
+            description=f.description,
+            directive=f.directive,
+            bypass_type=f.bypass_type,
+            references=f.references,
+        ))
+
+    return verified

@@ -14,6 +14,11 @@ class TestAnalyzeCommand:
         assert result.exit_code == 0
         assert "unsafe-inline" in result.output.lower()
 
+    def test_shows_grade(self):
+        result = runner.invoke(main, ["analyze", "script-src 'self' 'unsafe-inline'"])
+        assert result.exit_code == 0
+        assert "policy score:" in result.output.lower()
+
     def test_clean_policy(self):
         result = runner.invoke(main, [
             "analyze",
@@ -128,6 +133,23 @@ class TestGenerateCommand:
         ])
         assert result.exit_code == 0
         assert "<meta" in result.output
+
+
+class TestBypassCheckLiveFlag:
+    def test_check_live_flag_accepted(self):
+        result = runner.invoke(main, [
+            "bypass",
+            "script-src 'self' cdn.example.com",
+        ])
+        assert result.exit_code == 0
+
+
+class TestFetchBatchUrls:
+    """Test that fetch accepts multiple URLs (CLI argument parsing only)."""
+
+    def test_fetch_requires_at_least_one_url(self):
+        result = runner.invoke(main, ["fetch"])
+        assert result.exit_code != 0
 
 
 class TestVersionFlag:

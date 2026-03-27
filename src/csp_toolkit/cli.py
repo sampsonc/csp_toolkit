@@ -7,7 +7,7 @@ import sys
 import click
 from rich.console import Console
 
-from .analyzer import analyze
+from .analyzer import analyze, score_policy
 from .bypass import find_bypasses
 from .fetcher import fetch_csp
 from .generator import CSPBuilder
@@ -15,6 +15,7 @@ from .output import (
     format_findings_detail,
     format_findings_json,
     format_findings_rich,
+    format_grade,
     format_policy_summary,
     format_security_headers,
 )
@@ -70,72 +71,85 @@ def analyze_cmd(csp: str | None, file_path: str | None, fmt: str, report_only: b
     findings = analyze(policy)
     _output_findings(findings, fmt)
 
-    # Summary line
+    # Grade and summary
     if fmt != "json":
+        grade, score = score_policy(policy)
+        format_grade(grade, score, console)
+
         counts = {}
         for f in findings:
             counts[f.severity.value] = counts.get(f.severity.value, 0) + 1
         if counts:
             parts = [f"{v} {k}" for k, v in counts.items()]
-            console.print(f"\n[bold]Total: {len(findings)} findings[/bold] ({', '.join(parts)})")
+            console.print(f"[bold]Total: {len(findings)} findings[/bold] ({', '.join(parts)})")
 
 
 @main.command()
-@click.argument("url")
+@click.argument("urls", nargs=-1, required=True)
 @click.option("--analyze/--no-analyze", "do_analyze", default=False, help="Run analyzer on fetched policy")
 @click.option("--bypass/--no-bypass", "do_bypass", default=False, help="Run bypass finder on fetched policy")
 @click.option("--all", "do_all", is_flag=True, help="Run both analyzer and bypass finder")
 @click.option("--format", "-o", "fmt", type=click.Choice(["table", "detail", "json"]), default="table")
 @click.option("--no-verify-ssl", is_flag=True, help="Skip SSL certificate verification")
-def fetch(url: str, do_analyze: bool, do_bypass: bool, do_all: bool, fmt: str, no_verify_ssl: bool):
-    """Fetch and display CSP headers from a URL."""
-    try:
-        result = fetch_csp(url, verify_ssl=not no_verify_ssl)
-    except Exception as e:
-        console.print(f"[red]Error fetching {url}: {e}[/red]")
-        sys.exit(1)
+@click.option("--check-live", is_flag=True, help="Probe JSONP endpoints to verify they are live")
+def fetch(urls: tuple[str, ...], do_analyze: bool, do_bypass: bool, do_all: bool, fmt: str, no_verify_ssl: bool, check_live: bool):
+    """Fetch and display CSP headers from one or more URLs."""
+    for url_idx, url in enumerate(urls):
+        if url_idx > 0:
+            console.print("\n" + "=" * 70 + "\n")
 
-    console.print(f"\n[bold]URL:[/bold] {result.url}")
-    if result.final_url != result.url:
-        console.print(f"[bold]Redirected to:[/bold] {result.final_url}")
-    console.print(f"[bold]Status:[/bold] {result.status_code}")
+        try:
+            result = fetch_csp(url, verify_ssl=not no_verify_ssl)
+        except Exception as e:
+            console.print(f"[red]Error fetching {url}: {e}[/red]")
+            continue
 
-    if not result.policies:
-        console.print("\n[yellow]No CSP found on this page.[/yellow]")
-        format_security_headers(result.security_headers, console)
-        return
+        console.print(f"\n[bold]URL:[/bold] {result.url}")
+        if result.final_url != result.url:
+            console.print(f"[bold]Redirected to:[/bold] {result.final_url}")
+        console.print(f"[bold]Status:[/bold] {result.status_code}")
 
-    for i, policy in enumerate(result.policies):
-        label = "Report-Only" if policy.report_only else "Enforced"
-        source = "header" if i == 0 and result.csp_header else "meta tag"
-        console.print(f"\n[bold]Policy #{i + 1} ({label}, from {source}):[/bold]")
-        format_policy_summary(policy, console)
+        if not result.policies:
+            console.print("\n[yellow]No CSP found on this page.[/yellow]")
+            format_security_headers(result.security_headers, console)
+            continue
 
-        if do_all or do_analyze:
-            console.print(f"\n[bold]Analysis:[/bold]")
-            findings = analyze(policy)
-            _output_findings(findings, fmt)
+        for i, policy in enumerate(result.policies):
+            label = "Report-Only" if policy.report_only else "Enforced"
+            source = "header" if i == 0 and result.csp_header else "meta tag"
+            console.print(f"\n[bold]Policy #{i + 1} ({label}, from {source}):[/bold]")
+            format_policy_summary(policy, console)
 
-        if do_all or do_bypass:
-            console.print(f"\n[bold]Bypass Findings:[/bold]")
-            bypasses = find_bypasses(policy)
-            _output_findings(bypasses, fmt)
+            if do_all or do_analyze:
+                console.print(f"\n[bold]Analysis:[/bold]")
+                findings = analyze(policy)
+                _output_findings(findings, fmt)
 
-    if result.security_headers:
-        console.print()
-        format_security_headers(result.security_headers, console)
+                if fmt != "json":
+                    grade, score = score_policy(policy)
+                    format_grade(grade, score, console)
+
+            if do_all or do_bypass:
+                console.print(f"\n[bold]Bypass Findings:[/bold]")
+                bypasses = find_bypasses(policy, check_live=check_live)
+                _output_findings(bypasses, fmt)
+
+        if result.security_headers:
+            console.print()
+            format_security_headers(result.security_headers, console)
 
 
 @main.command("bypass")
 @click.argument("csp", required=False)
 @click.option("--file", "-f", "file_path", help="Read CSP from file (use - for stdin)")
 @click.option("--format", "-o", "fmt", type=click.Choice(["table", "detail", "json"]), default="detail")
-def bypass_cmd(csp: str | None, file_path: str | None, fmt: str):
+@click.option("--check-live", is_flag=True, help="Probe JSONP endpoints to verify they are live")
+def bypass_cmd(csp: str | None, file_path: str | None, fmt: str, check_live: bool):
     """Find potential CSP bypasses."""
     raw = _read_csp_input(csp, file_path)
     policy = parse(raw)
 
-    findings = find_bypasses(policy)
+    findings = find_bypasses(policy, check_live=check_live)
     _output_findings(findings, fmt)
 
     if fmt != "json":

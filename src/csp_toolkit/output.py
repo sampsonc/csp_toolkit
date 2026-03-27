@@ -120,6 +120,24 @@ def format_policy_summary(policy: Policy, console: Console | None = None) -> Non
     console.print(table)
 
 
+_GRADE_COLORS = {
+    "A+": "bold green",
+    "A": "green",
+    "B": "yellow",
+    "C": "yellow",
+    "D": "red",
+    "F": "bold red",
+}
+
+
+def format_grade(grade: str, score: int, console: Console | None = None) -> None:
+    """Print the policy grade and numeric score."""
+    if console is None:
+        console = Console()
+    color = _GRADE_COLORS.get(grade, "white")
+    console.print(f"\n[bold]Policy Score:[/bold] [{color}]{grade} ({score}/100)[/{color}]")
+
+
 def format_security_headers(headers: dict[str, str], console: Console | None = None) -> None:
     """Print related security headers."""
     if console is None:
