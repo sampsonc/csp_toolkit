@@ -166,17 +166,32 @@ csp-toolkit auto https://example.com -o apache
 # Crawl deeper (follow same-origin links)
 csp-toolkit auto https://example.com --depth 1
 
-# Use nonces instead of unsafe-inline for inline scripts/styles
-csp-toolkit auto https://example.com --nonce my-random-nonce
+# Auto-generate nonces for inline scripts/styles (shows which tags need nonce="...")
+csp-toolkit auto https://example.com --auto-nonce
+
+# Use SHA-256 hashes for inline content (most secure, no HTML changes needed)
+csp-toolkit auto https://example.com --hash
+
+# Use a specific nonce value
+csp-toolkit auto https://example.com --nonce my-server-nonce
 
 # Analyze the generated CSP for weaknesses
 csp-toolkit auto https://example.com --analyze
 
-# JSON output with all discovered resources
+# JSON output with all discovered resources, hashes, and nonces
 csp-toolkit auto https://example.com -o json
 ```
 
 Discovers all external resources (scripts, styles, images, fonts, frames, forms, media) and generates a tailored CSP that whitelists exactly the origins the site needs.
+
+Three modes for handling inline scripts/styles:
+
+| Flag | Security | How it works |
+|------|----------|--------------|
+| `--hash` | Highest | Computes SHA-256 of each inline block — browser verifies content matches |
+| `--auto-nonce` | High | Generates a nonce, tells you which tags need `nonce="..."` added |
+| `--nonce VALUE` | High | Same as auto-nonce but you provide the value |
+| (default) | Low | Uses `unsafe-inline` with a warning |
 
 ### `generate` — Generate a CSP from a preset
 
