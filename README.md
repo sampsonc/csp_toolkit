@@ -2,7 +2,7 @@
 
 Parse, analyze, generate, and find bypasses in Content Security Policy headers.
 
-A Python library and CLI tool for security researchers and bug bounty hunters. Includes a JSONP endpoint database (66 domains), CDN script gadget detection (13 CDNs, 31 gadgets), 21 weakness checks, policy scoring, CSP diffing, subdomain variance detection, nonce reuse detection, and more.
+A Python library and CLI tool for security researchers and bug bounty hunters. Auto-generate CSPs by crawling a website, analyze policies with 21 weakness checks, find bypasses against a database of 79 domains (66 JSONP + 13 CDNs), score policies A+ to F, diff policies, detect nonce reuse, and more.
 
 ## Install
 
@@ -153,7 +153,32 @@ csp-toolkit report-uri "script-src 'self'; report-uri https://example.com/csp"
 
 Checks if the `report-uri` / `report-to` endpoint is reachable and accepts CSP violation reports.
 
-### `generate` — Generate a CSP
+### `auto` — Auto-generate a CSP from a live website
+
+```bash
+# Crawl a page and generate a CSP based on its resources
+csp-toolkit auto https://example.com
+
+# Output as nginx or apache directive
+csp-toolkit auto https://example.com -o nginx
+csp-toolkit auto https://example.com -o apache
+
+# Crawl deeper (follow same-origin links)
+csp-toolkit auto https://example.com --depth 1
+
+# Use nonces instead of unsafe-inline for inline scripts/styles
+csp-toolkit auto https://example.com --nonce my-random-nonce
+
+# Analyze the generated CSP for weaknesses
+csp-toolkit auto https://example.com --analyze
+
+# JSON output with all discovered resources
+csp-toolkit auto https://example.com -o json
+```
+
+Discovers all external resources (scripts, styles, images, fonts, frames, forms, media) and generates a tailored CSP that whitelists exactly the origins the site needs.
+
+### `generate` — Generate a CSP from a preset
 
 ```bash
 # Strict (nonce-based, recommended)
@@ -310,7 +335,7 @@ cat flagged.txt | awk '{print $NF}' | sort -u | csp-toolkit scan -f - -o csv
 # Install dev dependencies
 uv sync --all-extras
 
-# Run tests (224 tests)
+# Run tests (258 tests)
 uv run pytest -v
 
 # Lint

@@ -64,7 +64,7 @@ _GRADE_COLORS = {
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="csp-toolkit")
+@click.version_option(version="0.2.0", prog_name="csp-toolkit")
 def main():
     """CSP Toolkit — Parse, analyze, generate, and find bypasses in Content Security Policy headers."""
 
