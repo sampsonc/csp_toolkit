@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .analyzer import score_policy
-from .fetcher import fetch_csp
-from .models import Policy
 from .scanner import ScanResult, scan_url
 
 

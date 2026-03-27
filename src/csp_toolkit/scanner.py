@@ -9,8 +9,8 @@ from dataclasses import dataclass
 
 from .analyzer import analyze, score_policy
 from .bypass import find_bypasses
-from .fetcher import FetchResult, fetch_csp
-from .models import Policy, Severity
+from .fetcher import fetch_csp
+from .models import Severity
 
 
 @dataclass

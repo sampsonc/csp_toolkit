@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx
 
-from .models import Finding, Policy, Severity
+from .models import Policy
 from .parser import parse
 
 

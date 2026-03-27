@@ -184,7 +184,7 @@ def _check_wildcard_source(policy: Policy) -> list[Finding]:
             sev = Severity.HIGH if name in ("script-src", "default-src") else Severity.MEDIUM
             findings.append(Finding(
                 severity=sev,
-                title=f"Wildcard '*' allows loading from any origin",
+                title="Wildcard '*' allows loading from any origin",
                 description=(
                     f"The wildcard source in {name} allows loading resources from any "
                     f"origin. For script-src this is equivalent to no CSP protection."
@@ -424,9 +424,9 @@ def _check_ip_address_sources(policy: Policy) -> list[Finding]:
                     severity=Severity.LOW,
                     title=f"IP address source '{source.raw}' in {name}",
                     description=(
-                        f"IP address sources are unusual in production CSP policies and "
-                        f"may indicate internal/development services that could be accessible "
-                        f"or exploitable."
+                        "IP address sources are unusual in production CSP policies and "
+                        "may indicate internal/development services that could be accessible "
+                        "or exploitable."
                     ),
                     directive=name,
                 ))

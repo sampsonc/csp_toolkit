@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .analyzer import score_policy
 from .diff import PolicyDiff, diff_policies
 from .fetcher import fetch_csp
-from .models import Policy
 from .parser import parse
 
 
@@ -165,7 +163,7 @@ def check_evolution(
         try:
             snap, alert = take_snapshot(url, store_dir=store_dir, timeout=timeout)
             results.append((snap, alert))
-        except Exception as e:
+        except Exception:
             now = datetime.now(timezone.utc).isoformat()
             error_snap = Snapshot(url=url, timestamp=now, csp_raw="", grade="?", score=0, report_only=False)
             results.append((error_snap, None))

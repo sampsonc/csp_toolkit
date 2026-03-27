@@ -11,7 +11,7 @@ from rich.text import Text
 
 from .analyzer import analyze, score_policy
 from .bypass import find_bypasses
-from .diff import diff_headers, diff_policies
+from .diff import diff_headers
 from .fetcher import fetch_csp
 from .generator import CSPBuilder
 from .probes import analyze_report_uri, check_header_injection, detect_nonce_reuse
@@ -135,7 +135,7 @@ def fetch(urls: tuple[str, ...], do_analyze: bool, do_bypass: bool, do_all: bool
             format_policy_summary(policy, console)
 
             if do_all or do_analyze:
-                console.print(f"\n[bold]Analysis:[/bold]")
+                console.print("\n[bold]Analysis:[/bold]")
                 findings = analyze(policy)
                 _output_findings(findings, fmt)
 
@@ -144,7 +144,7 @@ def fetch(urls: tuple[str, ...], do_analyze: bool, do_bypass: bool, do_all: bool
                     format_grade(grade, score, console)
 
             if do_all or do_bypass:
-                console.print(f"\n[bold]Bypass Findings:[/bold]")
+                console.print("\n[bold]Bypass Findings:[/bold]")
                 bypasses = find_bypasses(policy, check_live=check_live)
                 _output_findings(bypasses, fmt)
 
@@ -564,13 +564,13 @@ def nonce_check(url: str, requests: int, no_verify_ssl: bool):
         return
 
     if result.is_static:
-        console.print(f"[bold red]VULNERABLE: Static nonce detected![/bold red]")
+        console.print("[bold red]VULNERABLE: Static nonce detected![/bold red]")
         console.print(f"  Directive: {result.directive}")
         console.print(f"  Nonce value: '{result.nonces_found[0]}' (same across {result.num_requests} requests)")
-        console.print(f"  Impact: Attacker can reuse this nonce to bypass CSP nonce-based protection.")
+        console.print("  Impact: Attacker can reuse this nonce to bypass CSP nonce-based protection.")
     else:
         unique = len(set(result.nonces_found))
-        console.print(f"[green]Nonces are rotating correctly.[/green]")
+        console.print("[green]Nonces are rotating correctly.[/green]")
         console.print(f"  Directive: {result.directive}")
         console.print(f"  {unique} unique nonces across {len(result.nonces_found)} requests")
 
@@ -585,11 +585,11 @@ def header_inject(url: str, no_verify_ssl: bool):
     result = check_header_injection(url, verify_ssl=not no_verify_ssl)
 
     if result.vulnerable:
-        console.print(f"[bold red]VULNERABLE: Header injection detected![/bold red]")
+        console.print("[bold red]VULNERABLE: Header injection detected![/bold red]")
         console.print(f"  Technique: {result.technique}")
         console.print(f"  {result.details}")
     else:
-        console.print(f"[green]No header injection vectors detected.[/green]")
+        console.print("[green]No header injection vectors detected.[/green]")
 
 
 @main.command("report-uri")
@@ -609,7 +609,7 @@ def report_uri_cmd(csp: str | None, file_path: str | None, fetch_url: str | None
         raw = _read_csp_input(csp, file_path)
         policy = parse(raw)
 
-    console.print(f"[bold]Analyzing report-uri/report-to...[/bold]\n")
+    console.print("[bold]Analyzing report-uri/report-to...[/bold]\n")
 
     result = analyze_report_uri(policy, verify_ssl=not no_verify_ssl)
 
@@ -622,11 +622,11 @@ def report_uri_cmd(csp: str | None, file_path: str | None, fetch_url: str | None
         if result.uri_reachable is True:
             console.print(f"  [green]Reachable[/green] (HTTP {result.uri_status_code})")
             if result.accepts_post:
-                console.print(f"  [green]Accepts POST[/green] with CSP violation reports")
+                console.print("  [green]Accepts POST[/green] with CSP violation reports")
             else:
-                console.print(f"  [yellow]Does NOT accept POST[/yellow] — reports may not be collected")
+                console.print("  [yellow]Does NOT accept POST[/yellow] — reports may not be collected")
         elif result.uri_reachable is False:
-            console.print(f"  [red]NOT reachable[/red] — violation reports are being lost")
+            console.print("  [red]NOT reachable[/red] — violation reports are being lost")
 
     if result.report_to:
         console.print(f"[bold]report-to:[/bold] {result.report_to} [dim](group name — endpoint configured via Report-To header)[/dim]")
