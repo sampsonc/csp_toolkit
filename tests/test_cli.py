@@ -257,6 +257,16 @@ class TestReportUriCommand:
         assert "csp-endpoint" in result.output
 
 
+class TestAutoCommand:
+    def test_unreachable(self):
+        result = runner.invoke(main, [
+            "auto", "https://this-does-not-exist-99999.com",
+            "--timeout", "2",
+        ])
+        assert result.exit_code == 0
+        assert "could not fetch" in result.output.lower()
+
+
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(main, ["--version"])

@@ -12,6 +12,7 @@ from rich.text import Text
 from .analyzer import analyze, score_policy
 from .bypass import find_bypasses
 from .diff import diff_headers
+from .discover import discover_resources, generate_csp
 from .fetcher import fetch_csp
 from .generator import CSPBuilder
 from .probes import analyze_report_uri, check_header_injection, detect_nonce_reuse
@@ -630,3 +631,98 @@ def report_uri_cmd(csp: str | None, file_path: str | None, fetch_url: str | None
 
     if result.report_to:
         console.print(f"[bold]report-to:[/bold] {result.report_to} [dim](group name — endpoint configured via Report-To header)[/dim]")
+
+
+@main.command()
+@click.argument("url")
+@click.option("--depth", "-d", type=int, default=0, help="Crawl depth (0=single page, 1+=follow same-origin links)")
+@click.option("--max-pages", type=int, default=50, help="Maximum pages to crawl")
+@click.option("--format", "-o", "fmt", type=click.Choice(["header", "nginx", "apache", "meta", "json"]), default="header")
+@click.option("--nonce", help="Use nonce instead of unsafe-inline for inline scripts/styles")
+@click.option("--analyze/--no-analyze", "do_analyze", default=False, help="Run analyzer on the generated CSP")
+@click.option("--no-verify-ssl", is_flag=True, help="Skip SSL certificate verification")
+@click.option("--timeout", type=float, default=10.0)
+def auto(url: str, depth: int, max_pages: int, fmt: str, nonce: str | None, do_analyze: bool, no_verify_ssl: bool, timeout: float):
+    """Auto-generate a CSP by crawling a website and discovering its resources.
+
+    Fetches the page (and optionally follows links), finds all scripts, styles,
+    images, fonts, frames, and other resources, then generates a tailored CSP
+    that whitelists exactly the origins the site needs.
+    """
+    console.print(f"[bold]Discovering resources on {url}...[/bold]")
+    if depth > 0:
+        console.print(f"[dim]Crawling up to {depth} level(s) deep, max {max_pages} pages[/dim]")
+
+    resources = discover_resources(
+        url, depth=depth, max_pages=max_pages,
+        timeout=timeout, verify_ssl=not no_verify_ssl,
+    )
+
+    console.print(f"[bold]Crawled {resources.pages_crawled} page(s)[/bold]\n")
+
+    if resources.pages_crawled == 0:
+        console.print("[red]Could not fetch the URL.[/red]")
+        return
+
+    # Show discovered resources summary
+    console.print("[bold]Discovered resources:[/bold]")
+    _print_origins("script-src", resources.script_origins, resources.has_inline_scripts)
+    _print_origins("style-src", resources.style_origins, resources.has_inline_styles or resources.has_inline_style_attrs)
+    _print_origins("img-src", resources.img_origins)
+    _print_origins("font-src", resources.font_origins)
+    _print_origins("connect-src", resources.connect_origins)
+    _print_origins("media-src", resources.media_origins)
+    _print_origins("frame-src", resources.frame_origins)
+    _print_origins("object-src", resources.object_origins)
+    _print_origins("form-action", resources.form_origins)
+    _print_origins("manifest-src", resources.manifest_origins)
+
+    # Generate CSP
+    builder = generate_csp(resources, nonce=nonce)
+    console.print()
+
+    if fmt == "json":
+        import json
+        data = resources.to_dict()
+        data["generated_csp"] = builder.build()
+        data["generated_csp_nginx"] = builder.build_nginx()
+        data["generated_csp_apache"] = builder.build_apache()
+        click.echo(json.dumps(data, indent=2))
+    else:
+        formatters = {
+            "header": builder.build,
+            "nginx": builder.build_nginx,
+            "apache": builder.build_apache,
+            "meta": builder.build_meta,
+        }
+        console.print("[bold]Generated CSP:[/bold]")
+        click.echo(formatters[fmt]())
+
+    # Inline script/style warnings
+    if resources.has_inline_scripts and not nonce:
+        console.print("\n[yellow]Note: Inline scripts detected. 'unsafe-inline' was added to script-src.[/yellow]")
+        console.print("[yellow]For better security, use --nonce and add nonce attributes to your inline scripts.[/yellow]")
+    if (resources.has_inline_styles or resources.has_inline_style_attrs) and not nonce:
+        console.print("\n[yellow]Note: Inline styles detected. 'unsafe-inline' was added to style-src.[/yellow]")
+        console.print("[yellow]For better security, use --nonce and add nonce attributes to your style tags.[/yellow]")
+
+    # Optional analysis
+    if do_analyze:
+        csp_str = builder.build()
+        policy = parse(csp_str)
+        console.print("\n[bold]Analysis of generated CSP:[/bold]")
+        findings = analyze(policy)
+        _output_findings(findings, "table")
+        grade, score = score_policy(policy)
+        format_grade(grade, score, console)
+
+
+def _print_origins(directive: str, origins: set[str], has_inline: bool = False) -> None:
+    """Print discovered origins for a directive."""
+    if not origins and not has_inline:
+        return
+    parts = ["'self'"]
+    if has_inline:
+        parts.append("[yellow]+ inline[/yellow]")
+    parts.extend(sorted(origins))
+    console.print(f"  [bold]{directive}:[/bold] {' '.join(parts)}")

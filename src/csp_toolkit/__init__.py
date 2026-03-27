@@ -3,6 +3,7 @@
 from .analyzer import analyze, analyze_header, score_policy
 from .bypass import check_domain_gadgets, check_domain_jsonp, find_bypasses, probe_jsonp_endpoint
 from .diff import PolicyDiff, diff_headers, diff_policies
+from .discover import DiscoveredResources, discover_resources, generate_csp
 from .fetcher import FetchResult, fetch_csp
 from .generator import CSPBuilder
 from .models import Directive, Finding, Policy, Severity, Source, SourceType
@@ -33,11 +34,14 @@ __all__ = [
     "diff_headers",
     "diff_policies",
     "Directive",
+    "DiscoveredResources",
+    "discover_resources",
     "EvolutionAlert",
     "fetch_csp",
     "FetchResult",
     "find_bypasses",
     "Finding",
+    "generate_csp",
     "HeaderInjectionResult",
     "NonceReuseResult",
     "parse",
