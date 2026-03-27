@@ -6,9 +6,12 @@ import sys
 
 import click
 from rich.console import Console
+from rich.table import Table
+from rich.text import Text
 
 from .analyzer import analyze, score_policy
 from .bypass import find_bypasses
+from .diff import diff_headers, diff_policies
 from .fetcher import fetch_csp
 from .generator import CSPBuilder
 from .output import (
@@ -20,6 +23,8 @@ from .output import (
     format_security_headers,
 )
 from .parser import parse
+from .scanner import results_to_csv, results_to_json, scan_urls
+from .subdomain import check_subdomains
 
 
 console = Console()
@@ -46,6 +51,13 @@ def _output_findings(findings: list, fmt: str) -> None:
         format_findings_detail(findings, console)
     else:
         format_findings_rich(findings, console)
+
+
+_GRADE_COLORS = {
+    "A+": "bold green", "A": "green", "B": "yellow",
+    "C": "yellow", "D": "red", "F": "bold red",
+    "-": "dim", "?": "dim",
+}
 
 
 @click.group()
@@ -187,3 +199,272 @@ def generate(preset: str, add_source: tuple[str, ...], fmt: str, nonce: str | No
         "apache": builder.build_apache,
     }
     click.echo(formatters[fmt]())
+
+
+@main.command()
+@click.argument("urls", nargs=-1)
+@click.option("--file", "-f", "file_path", help="Read URLs from file (one per line)")
+@click.option("--format", "-o", "fmt", type=click.Choice(["table", "csv", "json"]), default="table")
+@click.option("--no-verify-ssl", is_flag=True, help="Skip SSL certificate verification")
+@click.option("--timeout", type=float, default=10.0, help="HTTP timeout per request (seconds)")
+def scan(urls: tuple[str, ...], file_path: str | None, fmt: str, no_verify_ssl: bool, timeout: float):
+    """Scan multiple URLs and rank by CSP weakness.
+
+    Accepts URLs as arguments or from a file (one URL per line).
+    Results are sorted weakest-first for easy target prioritization.
+    """
+    url_list = list(urls)
+    if file_path:
+        if file_path == "-":
+            url_list.extend(line.strip() for line in sys.stdin if line.strip())
+        else:
+            with open(file_path) as f:
+                url_list.extend(line.strip() for line in f if line.strip())
+
+    if not url_list:
+        click.echo("Error: provide URLs as arguments or via --file", err=True)
+        sys.exit(1)
+
+    console.print(f"[bold]Scanning {len(url_list)} URLs...[/bold]\n")
+
+    results = scan_urls(url_list, timeout=timeout, verify_ssl=not no_verify_ssl)
+
+    if fmt == "csv":
+        click.echo(results_to_csv(results))
+    elif fmt == "json":
+        click.echo(results_to_json(results))
+    else:
+        table = Table(title=f"CSP Scan Results ({len(results)} URLs)", show_lines=True)
+        table.add_column("Grade", width=5, justify="center")
+        table.add_column("Score", width=5, justify="right")
+        table.add_column("URL", ratio=1)
+        table.add_column("Mode", width=12)
+        table.add_column("Findings", width=8, justify="right")
+        table.add_column("Bypasses", width=8, justify="right")
+        table.add_column("Crit/High", width=9, justify="right")
+
+        for r in results:
+            if r.error:
+                table.add_row("?", "-", r.url, "[red]error[/red]", "-", "-", "-")
+                continue
+
+            color = _GRADE_COLORS.get(r.grade, "white")
+            grade_text = Text(r.grade, style=color)
+            score_text = str(r.score) if r.has_csp else "-"
+            mode = r.policy_mode
+            if mode == "none":
+                mode = "[yellow]no CSP[/yellow]"
+            elif mode == "report-only":
+                mode = "[dim]report-only[/dim]"
+
+            crit_high = f"{r.num_critical}/{r.num_high}" if r.has_csp else "-"
+            findings = str(r.num_findings) if r.has_csp else "-"
+            bypasses = str(r.num_bypasses) if r.has_csp else "-"
+
+            table.add_row(grade_text, score_text, r.url, mode, findings, bypasses, crit_high)
+
+        console.print(table)
+
+        # Summary
+        with_csp = sum(1 for r in results if r.has_csp)
+        no_csp = sum(1 for r in results if not r.has_csp and not r.error)
+        errors = sum(1 for r in results if r.error)
+        console.print(f"\n[bold]{with_csp}[/bold] with CSP, [bold]{no_csp}[/bold] without CSP, [bold]{errors}[/bold] errors")
+
+
+@main.command("diff")
+@click.argument("old_csp")
+@click.argument("new_csp")
+@click.option("--old-file", help="Read old CSP from file instead of argument")
+@click.option("--new-file", help="Read new CSP from file instead of argument")
+@click.option("--format", "-o", "fmt", type=click.Choice(["table", "json"]), default="table")
+def diff_cmd(old_csp: str, new_csp: str, old_file: str | None, new_file: str | None, fmt: str):
+    """Compare two CSP policies and show differences.
+
+    Pass two CSP strings as arguments, or use --old-file / --new-file.
+    Use URLs as arguments to fetch and compare live policies.
+    """
+    # Resolve inputs — support URLs, files, or raw strings
+    old_raw = _resolve_diff_input(old_csp, old_file)
+    new_raw = _resolve_diff_input(new_csp, new_file)
+
+    result = diff_headers(old_raw, new_raw)
+
+    if fmt == "json":
+        import json
+        data = {
+            "has_changes": result.has_changes,
+            "added": [{"directive": c.directive, "sources": c.new_sources} for c in result.added_directives],
+            "removed": [{"directive": c.directive, "sources": c.old_sources} for c in result.removed_directives],
+            "modified": [
+                {
+                    "directive": c.directive,
+                    "added_sources": c.added_sources,
+                    "removed_sources": c.removed_sources,
+                }
+                for c in result.modified_directives
+            ],
+            "unchanged": result.unchanged_directives,
+            "weakened": [c.directive for c in result.weakened],
+            "strengthened": [c.directive for c in result.strengthened],
+        }
+        click.echo(json.dumps(data, indent=2))
+        return
+
+    if not result.has_changes:
+        console.print("[green]Policies are identical.[/green]")
+        return
+
+    # Score both
+    old_policy = parse(old_raw)
+    new_policy = parse(new_raw)
+    old_grade, old_score = score_policy(old_policy)
+    new_grade, new_score = score_policy(new_policy)
+
+    delta = new_score - old_score
+    delta_str = f"+{delta}" if delta > 0 else str(delta)
+    delta_color = "green" if delta > 0 else ("red" if delta < 0 else "dim")
+    console.print(f"\n[bold]Score:[/bold] {old_grade} ({old_score}) → {new_grade} ({new_score}) [{delta_color}]({delta_str})[/{delta_color}]")
+
+    if result.added_directives:
+        console.print(f"\n[green][bold]Added directives ({len(result.added_directives)}):[/bold][/green]")
+        for c in result.added_directives:
+            console.print(f"  [green]+ {c.directive}[/green]: {' '.join(c.new_sources)}")
+
+    if result.removed_directives:
+        console.print(f"\n[red][bold]Removed directives ({len(result.removed_directives)}):[/bold][/red]")
+        for c in result.removed_directives:
+            console.print(f"  [red]- {c.directive}[/red]: {' '.join(c.old_sources)}")
+
+    if result.modified_directives:
+        console.print(f"\n[yellow][bold]Modified directives ({len(result.modified_directives)}):[/bold][/yellow]")
+        for c in result.modified_directives:
+            console.print(f"  [bold]{c.directive}[/bold]:")
+            for src in c.added_sources:
+                console.print(f"    [green]+ {src}[/green]")
+            for src in c.removed_sources:
+                console.print(f"    [red]- {src}[/red]")
+
+    if result.unchanged_directives:
+        console.print(f"\n[dim]Unchanged: {', '.join(result.unchanged_directives)}[/dim]")
+
+    # Warnings
+    weakened = result.weakened
+    if weakened:
+        console.print(f"\n[bold red]Warning: Policy WEAKENED in {len(weakened)} directive(s):[/bold red]")
+        for c in weakened:
+            console.print(f"  [red]{c.directive}[/red] ({c.change_type})")
+
+    strengthened = result.strengthened
+    if strengthened:
+        console.print(f"\n[bold green]Policy strengthened in {len(strengthened)} directive(s):[/bold green]")
+        for c in strengthened:
+            console.print(f"  [green]{c.directive}[/green] ({c.change_type})")
+
+
+def _resolve_diff_input(value: str, file_path: str | None) -> str:
+    """Resolve a diff input — could be a file path, URL, or raw CSP string."""
+    if file_path:
+        with open(file_path) as f:
+            return f.read().strip()
+
+    # Check if it looks like a URL
+    if value.startswith("https://") or value.startswith("http://"):
+        result = fetch_csp(value)
+        if result.policies:
+            # Use first enforced, or first available
+            enforced = [p for p in result.policies if not p.report_only]
+            policy = enforced[0] if enforced else result.policies[0]
+            return str(policy)
+        console.print(f"[yellow]No CSP found at {value}[/yellow]")
+        return ""
+
+    return value
+
+
+@main.command()
+@click.argument("domain")
+@click.option("--prefixes", "-p", help="Comma-separated subdomain prefixes (overrides defaults)")
+@click.option("--format", "-o", "fmt", type=click.Choice(["table", "csv", "json"]), default="table")
+@click.option("--no-verify-ssl", is_flag=True, help="Skip SSL certificate verification")
+@click.option("--timeout", type=float, default=8.0, help="HTTP timeout per request (seconds)")
+def subdomains(domain: str, prefixes: str | None, fmt: str, no_verify_ssl: bool, timeout: float):
+    """Check CSP across subdomains to find weak ones.
+
+    Checks common subdomains (www, api, app, staging, admin, etc.)
+    and ranks them by CSP weakness.
+    """
+    prefix_list = prefixes.split(",") if prefixes else None
+
+    console.print(f"[bold]Checking subdomains of {domain}...[/bold]\n")
+
+    results = check_subdomains(
+        domain,
+        prefixes=prefix_list,
+        timeout=timeout,
+        verify_ssl=not no_verify_ssl,
+    )
+
+    if not results:
+        console.print("[yellow]No reachable subdomains found.[/yellow]")
+        return
+
+    if fmt == "json":
+        import json
+        data = [
+            {
+                "subdomain": r.subdomain,
+                "url": r.url,
+                "has_csp": r.scan.has_csp,
+                "grade": r.scan.grade,
+                "score": r.scan.score,
+                "findings": r.scan.num_findings,
+                "bypasses": r.scan.num_bypasses,
+                "mode": r.scan.policy_mode,
+            }
+            for r in results
+        ]
+        click.echo(json.dumps(data, indent=2))
+    elif fmt == "csv":
+        import csv
+        import io
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["subdomain", "grade", "score", "findings", "bypasses", "mode"])
+        for r in results:
+            writer.writerow([
+                r.subdomain, r.scan.grade, r.scan.score,
+                r.scan.num_findings, r.scan.num_bypasses, r.scan.policy_mode,
+            ])
+        click.echo(output.getvalue())
+    else:
+        table = Table(title=f"Subdomain CSP Analysis — {domain}", show_lines=True)
+        table.add_column("Grade", width=5, justify="center")
+        table.add_column("Score", width=5, justify="right")
+        table.add_column("Subdomain", ratio=1)
+        table.add_column("Mode", width=12)
+        table.add_column("Findings", width=8, justify="right")
+        table.add_column("Bypasses", width=8, justify="right")
+
+        for r in results:
+            s = r.scan
+            color = _GRADE_COLORS.get(s.grade, "white")
+            grade_text = Text(s.grade, style=color)
+            score_text = str(s.score) if s.has_csp else "-"
+            mode = s.policy_mode
+            if mode == "none":
+                mode = "[yellow]no CSP[/yellow]"
+            elif mode == "report-only":
+                mode = "[dim]report-only[/dim]"
+
+            table.add_row(
+                grade_text, score_text, r.subdomain, mode,
+                str(s.num_findings) if s.has_csp else "-",
+                str(s.num_bypasses) if s.has_csp else "-",
+            )
+
+        console.print(table)
+
+        with_csp = sum(1 for r in results if r.scan.has_csp)
+        no_csp = sum(1 for r in results if not r.scan.has_csp)
+        console.print(f"\n[bold]{len(results)}[/bold] reachable, [bold]{with_csp}[/bold] with CSP, [bold]{no_csp}[/bold] without CSP")

@@ -152,6 +152,69 @@ class TestFetchBatchUrls:
         assert result.exit_code != 0
 
 
+class TestScanCommand:
+    def test_no_urls_error(self):
+        result = runner.invoke(main, ["scan"])
+        assert result.exit_code != 0
+
+    def test_scan_from_stdin(self):
+        result = runner.invoke(main, ["scan", "--file", "-"], input="https://this-does-not-exist-999.com\n")
+        assert result.exit_code == 0
+
+    def test_csv_format(self):
+        result = runner.invoke(main, [
+            "scan", "--format", "csv",
+            "https://this-does-not-exist-999.com",
+        ], catch_exceptions=False)
+        assert result.exit_code == 0
+        assert "url,grade,score" in result.output
+
+
+class TestDiffCommand:
+    def test_identical(self):
+        result = runner.invoke(main, ["diff", "script-src 'self'", "script-src 'self'"])
+        assert result.exit_code == 0
+        assert "identical" in result.output.lower()
+
+    def test_added_directive(self):
+        result = runner.invoke(main, [
+            "diff",
+            "script-src 'self'",
+            "script-src 'self'; base-uri 'none'",
+        ])
+        assert result.exit_code == 0
+        assert "base-uri" in result.output
+
+    def test_weakened_warning(self):
+        result = runner.invoke(main, [
+            "diff",
+            "script-src 'self'",
+            "script-src 'self' 'unsafe-inline'",
+        ])
+        assert result.exit_code == 0
+        assert "weaken" in result.output.lower()
+
+    def test_json_format(self):
+        result = runner.invoke(main, [
+            "diff", "--format", "json",
+            "script-src 'self'",
+            "script-src 'self' 'unsafe-inline'",
+        ])
+        assert result.exit_code == 0
+        assert '"has_changes": true' in result.output
+
+
+class TestSubdomainsCommand:
+    def test_unreachable_domain(self):
+        result = runner.invoke(main, [
+            "subdomains", "this-does-not-exist-12345.com",
+            "--prefixes", "www",
+            "--timeout", "2",
+        ])
+        assert result.exit_code == 0
+        assert "no reachable" in result.output.lower() or "0" in result.output
+
+
 class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(main, ["--version"])
