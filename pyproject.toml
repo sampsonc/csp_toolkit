@@ -9,7 +9,7 @@ description = "Parse, analyze, generate, and find bypasses in Content Security P
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
-authors = [{ name = "chs" }]
+authors = [{ name = "Carl Sampson", email = "chs@chs.us" }]
 keywords = ["csp", "security", "content-security-policy", "bug-bounty", "web-security"]
 classifiers = [
     "Development Status :: 3 - Alpha",
