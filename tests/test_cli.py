@@ -369,4 +369,4 @@ class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.4.0" in result.output
+        assert "0.5.0" in result.output
