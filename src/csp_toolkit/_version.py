@@ -9,7 +9,7 @@ def get_version() -> str:
 
         return version("csp-toolkit")
     except Exception:
-        return "0.5.0"
+        return "0.5.1"
 
 
 __version__ = get_version()
