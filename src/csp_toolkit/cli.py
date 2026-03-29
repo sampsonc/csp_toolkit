@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 
 import click
@@ -11,6 +12,8 @@ from rich.text import Text
 
 from .analyzer import analyze, score_policy
 from .bypass import find_bypasses
+from .effective import combine_enforced_header_policies
+from .export_ops import format_findings_sarif_json, format_findings_stable_json
 from .diff import diff_headers
 from .discover import discover_resources, generate_csp
 from .fetcher import FetchResult, fetch_csp
@@ -32,6 +35,7 @@ from .output import (
     format_security_headers,
 )
 from .parser import parse
+from .violations import parse_violations_json, violations_summary_json
 from .scanner import results_to_csv, results_to_json, scan_urls
 from .subdomain import check_subdomains
 from ._version import __version__
@@ -73,10 +77,14 @@ def _read_csp_input(csp: str | None, file: str | None) -> str:
     sys.exit(1)
 
 
-def _output_findings(findings: list, fmt: str) -> None:
+def _output_findings(findings: list, fmt: str, *, stable_json_tool: str = "csp_analyze") -> None:
     """Output findings in the requested format."""
     if fmt == "json":
         click.echo(format_findings_json(findings))
+    elif fmt == "json-v1":
+        click.echo(format_findings_stable_json(findings, tool=stable_json_tool))
+    elif fmt == "sarif":
+        click.echo(format_findings_sarif_json(findings))
     elif fmt == "detail":
         format_findings_detail(findings, console)
     else:
@@ -105,7 +113,11 @@ def main():
 @click.argument("csp", required=False)
 @click.option("--file", "-f", "file_path", help="Read CSP from file (use - for stdin)")
 @click.option(
-    "--format", "-o", "fmt", type=click.Choice(["table", "detail", "json"]), default="table"
+    "--format",
+    "-o",
+    "fmt",
+    type=click.Choice(["table", "detail", "json", "json-v1", "sarif"]),
+    default="table",
 )
 @click.option("--report-only", is_flag=True, help="Treat as Report-Only header")
 def analyze_cmd(csp: str | None, file_path: str | None, fmt: str, report_only: bool):
@@ -113,15 +125,19 @@ def analyze_cmd(csp: str | None, file_path: str | None, fmt: str, report_only: b
     raw = _read_csp_input(csp, file_path)
     policy = parse(raw, report_only=report_only)
 
+    findings = analyze(policy)
+    if fmt in ("json-v1", "sarif"):
+        _output_findings(findings, fmt, stable_json_tool="csp_analyze")
+        return
+
     console.print()
     format_policy_summary(policy, console)
     console.print()
 
-    findings = analyze(policy)
-    _output_findings(findings, fmt)
+    _output_findings(findings, fmt, stable_json_tool="csp_analyze")
 
     # Grade and summary
-    if fmt != "json":
+    if fmt not in ("json", "json-v1", "sarif"):
         grade, score = score_policy(policy)
         format_grade(grade, score, console)
 
@@ -143,7 +159,11 @@ def analyze_cmd(csp: str | None, file_path: str | None, fmt: str, report_only: b
 )
 @click.option("--all", "do_all", is_flag=True, help="Run both analyzer and bypass finder")
 @click.option(
-    "--format", "-o", "fmt", type=click.Choice(["table", "detail", "json"]), default="table"
+    "--format",
+    "-o",
+    "fmt",
+    type=click.Choice(["table", "detail", "json", "json-v1", "sarif"]),
+    default="table",
 )
 @click.option("--no-verify-ssl", is_flag=True, help="Skip SSL certificate verification")
 @click.option("--check-live", is_flag=True, help="Probe JSONP endpoints to verify they are live")
@@ -186,16 +206,16 @@ def fetch(
             if do_all or do_analyze:
                 console.print("\n[bold]Analysis:[/bold]")
                 findings = analyze(policy)
-                _output_findings(findings, fmt)
+                _output_findings(findings, fmt, stable_json_tool="csp_analyze")
 
-                if fmt != "json":
+                if fmt not in ("json", "json-v1", "sarif"):
                     grade, score = score_policy(policy)
                     format_grade(grade, score, console)
 
             if do_all or do_bypass:
                 console.print("\n[bold]Bypass Findings:[/bold]")
                 bypasses = find_bypasses(policy, check_live=check_live)
-                _output_findings(bypasses, fmt)
+                _output_findings(bypasses, fmt, stable_json_tool="csp_bypass")
 
         if result.security_headers:
             console.print()
@@ -206,7 +226,11 @@ def fetch(
 @click.argument("csp", required=False)
 @click.option("--file", "-f", "file_path", help="Read CSP from file (use - for stdin)")
 @click.option(
-    "--format", "-o", "fmt", type=click.Choice(["table", "detail", "json"]), default="detail"
+    "--format",
+    "-o",
+    "fmt",
+    type=click.Choice(["table", "detail", "json", "json-v1", "sarif"]),
+    default="detail",
 )
 @click.option("--check-live", is_flag=True, help="Probe JSONP endpoints to verify they are live")
 def bypass_cmd(csp: str | None, file_path: str | None, fmt: str, check_live: bool):
@@ -215,9 +239,9 @@ def bypass_cmd(csp: str | None, file_path: str | None, fmt: str, check_live: boo
     policy = parse(raw)
 
     findings = find_bypasses(policy, check_live=check_live)
-    _output_findings(findings, fmt)
+    _output_findings(findings, fmt, stable_json_tool="csp_bypass")
 
-    if fmt != "json":
+    if fmt not in ("json", "json-v1", "sarif"):
         if findings:
             console.print(f"\n[bold]Total: {len(findings)} potential bypasses found[/bold]")
         else:
@@ -762,6 +786,79 @@ def report_uri_cmd(
         console.print(
             f"[bold]report-to:[/bold] {result.report_to} [dim](group name — endpoint configured via Report-To header)[/dim]"
         )
+
+
+@main.command("effective")
+@click.option("--file", "-f", "file_path", required=True, help="File with one CSP per line")
+@click.option(
+    "--format",
+    "-o",
+    "fmt",
+    type=click.Choice(["table", "detail", "json"]),
+    default="table",
+)
+def effective_cmd(file_path: str, fmt: str):
+    """Combine multiple CSP strings as stacked enforced headers (intersection heuristic)."""
+    with open(file_path) as f:
+        lines = f.read().splitlines()
+    strings = [ln.strip() for ln in lines if ln.strip()]
+    if len(strings) < 2:
+        click.echo("Error: provide at least two non-empty CSP lines in the file", err=True)
+        sys.exit(1)
+    combined, warnings = combine_enforced_header_policies(strings)
+    if fmt == "json":
+        click.echo(json.dumps({"combined": combined.raw, "warnings": warnings}, indent=2))
+        return
+    console.print("[bold]Combined policy[/bold] (intersection heuristic)\n")
+    for w in warnings:
+        console.print(f"[yellow]{w}[/yellow]")
+    if fmt == "detail":
+        from .output import format_policy_summary
+
+        format_policy_summary(combined, console)
+        return
+    console.print(combined.raw)
+
+
+@main.command("violations")
+@click.argument("path")
+@click.option(
+    "--format",
+    "-o",
+    "fmt",
+    type=click.Choice(["table", "json"]),
+    default="table",
+)
+def violations_cmd(path: str, fmt: str):
+    """Summarize CSP violation report JSON (e.g. from report-uri payloads)."""
+    with open(path) as f:
+        text = f.read()
+    violations = parse_violations_json(text)
+    if not violations:
+        console.print("[yellow]No violation reports found.[/yellow]")
+        return
+    if fmt == "json":
+        click.echo(json.dumps(violations_summary_json(violations), indent=2))
+        return
+    summary = violations_summary_json(violations)
+    console.print(f"[bold]{summary['count']} violation report(s)[/bold]\n")
+    table = Table(title="Grouped violations", show_lines=True)
+    table.add_column("blocked-uri", ratio=1)
+    table.add_column("effective", width=18)
+    table.add_column("violated", width=18)
+    table.add_column("count", justify="right", width=6)
+    for g in summary["groups"]:
+        table.add_row(
+            g["blocked_uri"] or "—",
+            g["effective_directive"] or "—",
+            g["violated_directive"] or "—",
+            str(g["count"]),
+        )
+    console.print(table)
+    console.print("\n[dim]Sample (first reports):[/dim]")
+    for v in violations[:10]:
+        bu = v.get("blocked-uri") or v.get("blocked_uri") or "—"
+        console.print(f"  [cyan]{bu}[/cyan]")
 
 
 @main.command()
