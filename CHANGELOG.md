@@ -5,6 +5,14 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-03-27
+
+### Added (bug bounty)
+
+- **Effective / stacked CSP:** `combine_policies` and `combine_enforced_header_policies` — intersection heuristic for multiple enforced policies; `fetch --combine-enforced`; `effective` CLI command.
+- **Violation reports:** `parse_violations_json`, grouping, remediation hints; `violations` CLI.
+- **Automation exports:** stable `json-v1` document and **SARIF 2.1.0** for `analyze` / `bypass` (`-o json-v1`, `-o sarif`).
+
 ## [0.5.1] - 2026-03-27
 
 ### Changed
@@ -55,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release: CSP parse/analyze/bypass/scan/diff/subdomains/monitor, CLI, browser extension, Nuclei templates.
 
+[0.6.0]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.6.0
 [0.5.1]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.5.1
 [0.5.0]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.5.0
 [0.4.0]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.4.0

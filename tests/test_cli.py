@@ -369,4 +369,43 @@ class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.5.1" in result.output
+        assert "0.6.0" in result.output
+
+
+class TestBugBountyCli:
+    def test_analyze_json_v1(self):
+        result = runner.invoke(
+            main,
+            ["analyze", "-o", "json-v1", "script-src 'self'"],
+        )
+        assert result.exit_code == 0
+        assert '"schema_version": "1.0"' in result.output
+        assert "csp_analyze" in result.output
+
+    def test_bypass_sarif(self):
+        result = runner.invoke(
+            main,
+            ["bypass", "-o", "sarif", "script-src 'self' https://example.com"],
+        )
+        assert result.exit_code == 0
+        assert '"version": "2.1.0"' in result.output
+
+    def test_effective_file(self):
+        content = "script-src 'self'\nscript-src 'self' https://cdn.example\n"
+        with runner.isolated_filesystem():
+            with open("p.txt", "w") as f:
+                f.write(content)
+            result = runner.invoke(main, ["effective", "-f", "p.txt"])
+        assert result.exit_code == 0
+        assert "combined" in result.output.lower()
+
+    def test_violations_json_file(self):
+        import json
+
+        rep = {"csp-report": {"blocked-uri": "inline", "effective-directive": "script-src"}}
+        with runner.isolated_filesystem():
+            with open("v.json", "w") as f:
+                json.dump(rep, f)
+            result = runner.invoke(main, ["violations", "v.json"])
+        assert result.exit_code == 0
+        assert "inline" in result.output
