@@ -5,6 +5,13 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-04-01
+
+### Added
+
+- **`violations` CLI:** Compare violation report JSON to a supplied CSP (`--csp` / `--csp-file`), show suggested directive/source fixes, optional patched CSP draft (`--fix-mode patch`), and write the draft to a file (`--write-patch`).
+- **Library:** `suggest_violation_fixes` and `build_patched_csp` in `csp_toolkit.violations`, re-exported from `csp_toolkit`.
+
 ## [0.6.1] - 2026-03-29
 
 ### Fixed
@@ -69,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release: CSP parse/analyze/bypass/scan/diff/subdomains/monitor, CLI, browser extension, Nuclei templates.
 
+[0.6.2]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.6.2
 [0.6.1]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.6.1
 [0.6.0]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.6.0
 [0.5.1]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.5.1

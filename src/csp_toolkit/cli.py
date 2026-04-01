@@ -35,7 +35,12 @@ from .output import (
     format_security_headers,
 )
 from .parser import parse
-from .violations import parse_violations_json, violations_summary_json
+from .violations import (
+    build_patched_csp,
+    parse_violations_json,
+    suggest_violation_fixes,
+    violations_summary_json,
+)
 from .scanner import results_to_csv, results_to_json, scan_urls
 from .subdomain import check_subdomains
 from ._version import __version__
@@ -822,6 +827,20 @@ def effective_cmd(file_path: str, fmt: str):
 
 @main.command("violations")
 @click.argument("path")
+@click.option("--csp", "csp_raw", help="CSP header string to evaluate against violations")
+@click.option("--csp-file", help="Read CSP header string from file")
+@click.option(
+    "--fix-mode",
+    type=click.Choice(["suggest", "patch"]),
+    default="suggest",
+    show_default=True,
+    help="In patch mode, also emit a patched CSP draft when CSP is provided.",
+)
+@click.option(
+    "--write-patch",
+    "write_patch_path",
+    help="Write patched CSP draft to this file (requires --fix-mode patch and --csp/--csp-file).",
+)
 @click.option(
     "--format",
     "-o",
@@ -829,18 +848,53 @@ def effective_cmd(file_path: str, fmt: str):
     type=click.Choice(["table", "json"]),
     default="table",
 )
-def violations_cmd(path: str, fmt: str):
-    """Summarize CSP violation report JSON (e.g. from report-uri payloads)."""
+def violations_cmd(
+    path: str,
+    csp_raw: str | None,
+    csp_file: str | None,
+    fix_mode: str,
+    write_patch_path: str | None,
+    fmt: str,
+):
+    """Summarize CSP violations and suggest policy fixes (with --csp/--csp-file)."""
     with open(path) as f:
         text = f.read()
     violations = parse_violations_json(text)
     if not violations:
         console.print("[yellow]No violation reports found.[/yellow]")
         return
-    if fmt == "json":
-        click.echo(json.dumps(violations_summary_json(violations), indent=2))
-        return
     summary = violations_summary_json(violations)
+
+    policy = None
+    if csp_file:
+        with open(csp_file) as f:
+            csp_raw = f.read().strip()
+    if csp_raw:
+        policy = parse(csp_raw)
+    suggestions = suggest_violation_fixes(violations, policy) if policy else []
+    patched_csp = build_patched_csp(policy, suggestions) if policy and fix_mode == "patch" else None
+    if write_patch_path and patched_csp is None:
+        click.echo(
+            "Error: --write-patch requires --fix-mode patch and a CSP via --csp/--csp-file.",
+            err=True,
+        )
+        sys.exit(1)
+    if write_patch_path and patched_csp is not None:
+        with open(write_patch_path, "w") as f:
+            f.write(patched_csp + "\n")
+
+    if fmt == "json":
+        payload = {"summary": summary}
+        if policy:
+            payload["csp"] = str(policy)
+            payload["suggestions"] = suggestions
+            if patched_csp is not None:
+                payload["patched_csp"] = patched_csp
+                if write_patch_path:
+                    payload["patched_csp_written_to"] = write_patch_path
+        click.echo(json.dumps(payload, indent=2))
+        return
+
     console.print(f"[bold]{summary['count']} violation report(s)[/bold]\n")
     table = Table(title="Grouped violations", show_lines=True)
     table.add_column("blocked-uri", ratio=1)
@@ -855,6 +909,40 @@ def violations_cmd(path: str, fmt: str):
             str(g["count"]),
         )
     console.print(table)
+    if policy:
+        console.print("\n[bold]Suggested fixes (based on supplied CSP):[/bold]")
+        sugg_table = Table(show_lines=True)
+        sugg_table.add_column("directive", width=18)
+        sugg_table.add_column("blocked-uri", ratio=1)
+        sugg_table.add_column("suggested source", ratio=1)
+        sugg_table.add_column("count", justify="right", width=6)
+        sugg_table.add_column("action", width=24)
+        for s in suggestions:
+            action = str(s["action"])
+            if s["already_allowed"]:
+                action = "[green]already allowed[/green]"
+            elif action == "consider_adding_source":
+                action = "[yellow]consider adding source[/yellow]"
+            else:
+                action = "[dim]manual review[/dim]"
+            sugg_table.add_row(
+                str(s["directive"]),
+                str(s["blocked_uri"] or "—"),
+                str(s["suggested_source"] or "—"),
+                str(s["count"]),
+                action,
+            )
+        console.print(sugg_table)
+        console.print(
+            "[dim]Tip: prefer nonce/hash updates for inline script/style instead of relying on "
+            "'unsafe-inline'.[/dim]"
+        )
+        if patched_csp is not None:
+            console.print("\n[bold]Patched CSP draft:[/bold]")
+            console.print(patched_csp)
+            if write_patch_path:
+                console.print(f"[dim]Wrote patched CSP to {write_patch_path}[/dim]")
+
     console.print("\n[dim]Sample (first reports):[/dim]")
     for v in violations[:10]:
         bu = v.get("blocked-uri") or v.get("blocked_uri") or "—"

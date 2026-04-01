@@ -369,7 +369,7 @@ class TestVersionFlag:
     def test_version(self):
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.6.1" in result.output
+        assert "0.6.2" in result.output
 
 
 class TestBugBountyCli:
@@ -409,3 +409,112 @@ class TestBugBountyCli:
             result = runner.invoke(main, ["violations", "v.json"])
         assert result.exit_code == 0
         assert "inline" in result.output
+
+    def test_violations_with_csp_suggestions_json(self):
+        import json
+
+        rep = {
+            "csp-report": {
+                "blocked-uri": "https://cdn.example.com/app.js",
+                "effective-directive": "script-src",
+            }
+        }
+        with runner.isolated_filesystem():
+            with open("v.json", "w") as f:
+                json.dump(rep, f)
+            result = runner.invoke(
+                main,
+                [
+                    "violations",
+                    "v.json",
+                    "--csp",
+                    "default-src 'self'; script-src 'self'",
+                    "--format",
+                    "json",
+                ],
+            )
+        assert result.exit_code == 0
+        assert '"suggestions"' in result.output
+        assert "https://cdn.example.com" in result.output
+
+    def test_violations_with_patch_mode_json(self):
+        import json
+
+        rep = {
+            "csp-report": {
+                "blocked-uri": "https://cdn.example.com/app.js",
+                "effective-directive": "script-src",
+            }
+        }
+        with runner.isolated_filesystem():
+            with open("v.json", "w") as f:
+                json.dump(rep, f)
+            result = runner.invoke(
+                main,
+                [
+                    "violations",
+                    "v.json",
+                    "--csp",
+                    "default-src 'self'; script-src 'self'",
+                    "--fix-mode",
+                    "patch",
+                    "--format",
+                    "json",
+                ],
+            )
+        assert result.exit_code == 0
+        assert '"patched_csp"' in result.output
+        assert "script-src 'self' https://cdn.example.com" in result.output
+
+    def test_violations_patch_mode_writes_file(self):
+        import json
+
+        rep = {
+            "csp-report": {
+                "blocked-uri": "https://cdn.example.com/app.js",
+                "effective-directive": "script-src",
+            }
+        }
+        with runner.isolated_filesystem():
+            with open("v.json", "w") as f:
+                json.dump(rep, f)
+            result = runner.invoke(
+                main,
+                [
+                    "violations",
+                    "v.json",
+                    "--csp",
+                    "default-src 'self'; script-src 'self'",
+                    "--fix-mode",
+                    "patch",
+                    "--write-patch",
+                    "patched.csp",
+                    "--format",
+                    "json",
+                ],
+            )
+            assert result.exit_code == 0
+            with open("patched.csp") as f:
+                patched = f.read()
+        assert "script-src 'self' https://cdn.example.com" in patched
+
+    def test_violations_write_patch_requires_patch_mode(self):
+        import json
+
+        rep = {"csp-report": {"blocked-uri": "inline", "effective-directive": "script-src"}}
+        with runner.isolated_filesystem():
+            with open("v.json", "w") as f:
+                json.dump(rep, f)
+            result = runner.invoke(
+                main,
+                [
+                    "violations",
+                    "v.json",
+                    "--csp",
+                    "script-src 'self'",
+                    "--write-patch",
+                    "patched.csp",
+                ],
+            )
+        assert result.exit_code != 0
+        assert "--write-patch requires --fix-mode patch" in result.output

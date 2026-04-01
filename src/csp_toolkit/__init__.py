@@ -23,13 +23,20 @@ from .probes import (
 from .scanner import ScanResult, scan_url, scan_urls
 from .subdomain import SubdomainResult, check_subdomains
 from .tracker import EvolutionAlert, Snapshot, check_evolution, take_snapshot
-from .violations import group_violations, parse_violations_json, violations_summary_json
+from .violations import (
+    build_patched_csp,
+    group_violations,
+    parse_violations_json,
+    suggest_violation_fixes,
+    violations_summary_json,
+)
 
 __all__ = [
     "__version__",
     "analyze",
     "analyze_header",
     "analyze_report_uri",
+    "build_patched_csp",
     "check_domain_gadgets",
     "check_domain_jsonp",
     "check_evolution",
@@ -68,6 +75,7 @@ __all__ = [
     "ScanResult",
     "score_policy",
     "Severity",
+    "suggest_violation_fixes",
     "Snapshot",
     "Source",
     "SourceType",

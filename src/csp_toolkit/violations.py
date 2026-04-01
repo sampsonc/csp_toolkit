@@ -1,10 +1,13 @@
-"""Parse and summarize CSP violation reports (e.g. ``report-uri`` JSON)."""
+"""Parse, summarize, and suggest fixes for CSP violation reports."""
 
 from __future__ import annotations
 
 import json
 from collections import Counter
 from typing import Any
+from urllib.parse import urlparse
+
+from .models import Policy
 
 
 def parse_violations_json(text: str) -> list[dict[str, Any]]:
@@ -52,3 +55,107 @@ def violations_summary_json(violations: list[dict[str, Any]]) -> dict[str, Any]:
             for (bu, ed, vd), c in grouped
         ],
     }
+
+
+def suggest_violation_fixes(
+    violations: list[dict[str, Any]], policy: Policy
+) -> list[dict[str, str | bool | int]]:
+    """Suggest minimal policy updates based on grouped violations and current policy."""
+    grouped = group_violations(violations)
+    suggestions: list[dict[str, str | bool | int]] = []
+    for (blocked_uri, effective_directive, violated_directive), count in grouped:
+        directive_name = (effective_directive or violated_directive or "").split()[0]
+        if not directive_name:
+            continue
+        source = _blocked_uri_to_source(blocked_uri, directive_name)
+        if source is None:
+            suggestions.append(
+                {
+                    "directive": directive_name,
+                    "blocked_uri": blocked_uri or "",
+                    "count": count,
+                    "suggested_source": "",
+                    "already_allowed": False,
+                    "action": "manual_review",
+                    "reason": "Cannot infer safe source expression from blocked-uri.",
+                }
+            )
+            continue
+
+        existing = policy.effective_directive(directive_name)
+        already_allowed = existing is not None and existing.has_source(source)
+        action = "none" if already_allowed else "consider_adding_source"
+        reason = (
+            "Source already present in effective directive."
+            if already_allowed
+            else "Violation indicates this source is currently blocked."
+        )
+        suggestions.append(
+            {
+                "directive": directive_name,
+                "blocked_uri": blocked_uri or "",
+                "count": count,
+                "suggested_source": source,
+                "already_allowed": already_allowed,
+                "action": action,
+                "reason": reason,
+            }
+        )
+    return suggestions
+
+
+def build_patched_csp(policy: Policy, suggestions: list[dict[str, str | bool | int]]) -> str:
+    """Build a patched CSP draft by applying additive suggestions."""
+    directives: dict[str, list[str]] = {
+        name: [s.raw for s in directive.sources] for name, directive in policy.directives.items()
+    }
+
+    for s in suggestions:
+        action = str(s.get("action") or "")
+        if action != "consider_adding_source":
+            continue
+        directive = str(s.get("directive") or "").strip().lower()
+        source = str(s.get("suggested_source") or "").strip()
+        if not directive or not source:
+            continue
+
+        # If directive only exists via default-src fallback, materialize explicit directive first.
+        if directive not in directives:
+            fallback = policy.effective_directive(directive)
+            directives[directive] = [src.raw for src in fallback.sources] if fallback else []
+
+        if source not in directives[directive]:
+            directives[directive].append(source)
+
+    parts: list[str] = []
+    for name in sorted(directives.keys()):
+        sources = directives[name]
+        if sources:
+            parts.append(f"{name} {' '.join(sources)}")
+        else:
+            parts.append(name)
+    return "; ".join(parts)
+
+
+def _blocked_uri_to_source(blocked_uri: str, directive_name: str) -> str | None:
+    raw = (blocked_uri or "").strip()
+    lower = raw.lower()
+    if not lower:
+        return None
+    if lower == "self":
+        return "'self'"
+    if lower in {"inline", "inline-script", "inline-style"}:
+        # Better options are nonce/hash, but this points to the direct unblock token.
+        return "'unsafe-inline'"
+    if lower == "eval":
+        return "'unsafe-eval'"
+    if lower.endswith(":"):
+        return lower
+    parsed = urlparse(raw)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    if directive_name in {"img-src", "media-src", "font-src"} and lower in {"data", "blob"}:
+        return f"{lower}:"
+    if "://" not in raw and "." in raw:
+        return raw
+    return None

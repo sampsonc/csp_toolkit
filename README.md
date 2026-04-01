@@ -155,6 +155,40 @@ csp-toolkit report-uri "script-src 'self'; report-uri https://example.com/csp"
 
 Checks if the `report-uri` / `report-to` endpoint is reachable and accepts CSP violation reports.
 
+### `effective` — Combine stacked enforced CSP headers
+
+When a response sends multiple `Content-Security-Policy` headers, browsers enforce their **intersection**. This command approximates that by intersecting literal source lists per directive (with `default-src` fallback where applicable).
+
+```bash
+# File: one CSP value per line (at least two non-empty lines)
+csp-toolkit effective -f stacked-csp.txt
+csp-toolkit effective -f stacked-csp.txt -o json
+```
+
+### `violations` — Summarize violation reports and suggest policy fixes
+
+Reads JSON from a file (one object, an array, or `csp-report`-wrapped reports). Without a CSP, it only groups and counts violations. With `--csp` or `--csp-file`, it suggests which directive likely needs which source, checks whether that source is already allowed (including `default-src` fallback), and can emit a **patched CSP draft**.
+
+```bash
+# Grouped summary only
+csp-toolkit violations reports.json
+
+# Compare reports to your current policy (string or file)
+csp-toolkit violations reports.json --csp "default-src 'self'; script-src 'self'"
+csp-toolkit violations reports.json --csp-file policy.txt
+
+# Emit a draft policy with additive fixes (review before deploy)
+csp-toolkit violations reports.json --csp-file policy.txt --fix-mode patch
+
+# Write the draft to disk
+csp-toolkit violations reports.json --csp-file policy.txt --fix-mode patch --write-patch patched.csp
+
+# JSON: summary, suggestions, patched_csp (patch mode), patched_csp_written_to (with --write-patch)
+csp-toolkit violations reports.json --csp-file policy.txt --fix-mode patch --format json
+```
+
+**Workflow with a live site:** fetch or copy the CSP first (`csp-toolkit fetch https://example.com`), save violation JSON from your browser or `report-uri` collector, then run `violations` with `--csp-file`. Inline/script violations may suggest `'unsafe-inline'`; prefer nonces or hashes where possible.
+
 ### `auto` — Auto-generate a CSP from a live website
 
 ```bash
@@ -262,6 +296,16 @@ result = csp_toolkit.check_header_injection("https://example.com")
 # Analyze report-uri
 result = csp_toolkit.analyze_report_uri(policy)
 
+# Violation reports: parse JSON, suggest fixes vs a policy, build patched draft
+reports = csp_toolkit.parse_violations_json(open("reports.json").read())
+suggestions = csp_toolkit.suggest_violation_fixes(reports, policy)
+patched = csp_toolkit.build_patched_csp(policy, suggestions)
+
+# Stacked policies (intersection heuristic)
+combined, warnings = csp_toolkit.combine_enforced_header_policies(
+    ["default-src 'self'", "script-src https://cdn.example.com"]
+)
+
 # Look up specific domains
 csp_toolkit.check_domain_jsonp("accounts.google.com")
 csp_toolkit.check_domain_gadgets("cdnjs.cloudflare.com")
@@ -358,7 +402,7 @@ Pushing a tag `v*` runs [`.github/workflows/publish.yml`](.github/workflows/publ
 # Install dev dependencies
 uv sync --all-extras
 
-# Run tests (261 tests)
+# Run tests (269 tests)
 uv run pytest -v
 
 # Same coverage gate as CI (optional locally)
