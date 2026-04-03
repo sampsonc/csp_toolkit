@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "csp-toolkit"
-version = "0.6.2"
+version = "0.6.3"
 description = "Parse, analyze, generate, and find bypasses in Content Security Policy headers"
 readme = "README.md"
 license = "MIT"
@@ -22,6 +22,12 @@ dependencies = [
     "httpx>=0.27",
     "beautifulsoup4>=4.12",
 ]
+
+[project.urls]
+Homepage = "https://chs.us/2026/03/csp-toolkit/"
+Repository = "https://github.com/sampsonc/csp_toolkit"
+Documentation = "https://github.com/sampsonc/csp_toolkit#readme"
+Author = "https://chs.us"
 
 [project.optional-dependencies]
 dev = [

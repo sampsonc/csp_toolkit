@@ -10,3 +10,4 @@ build/
 .coverage
 *.egg
 .eggs/
+.letta/

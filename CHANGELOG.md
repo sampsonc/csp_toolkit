@@ -5,6 +5,16 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-04-03
+
+### Added
+
+- **`[project.urls]`** in `pyproject.toml` — Homepage, Repository, Documentation, and Author links (shown on the [PyPI project page](https://pypi.org/project/csp-toolkit/)).
+
+### Changed
+
+- **`.gitignore`:** ignore `.letta/` (local session/tooling artifacts).
+
 ## [0.6.2] - 2026-04-01
 
 ### Added
@@ -76,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release: CSP parse/analyze/bypass/scan/diff/subdomains/monitor, CLI, browser extension, Nuclei templates.
 
+[0.6.3]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.6.3
 [0.6.2]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.6.2
 [0.6.1]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.6.1
 [0.6.0]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.6.0
