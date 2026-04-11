@@ -3,8 +3,6 @@
 import json
 from unittest.mock import Mock, patch
 
-import pytest
-
 from csp_toolkit.violations import ai_enhance_violations, _has_anthropic, _build_violation_analysis_prompt
 from csp_toolkit.parser import parse
 

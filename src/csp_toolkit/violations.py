@@ -219,7 +219,7 @@ def ai_enhance_violations(
 def _has_anthropic() -> bool:
     """Check if anthropic package is available."""
     try:
-        import anthropic
+        import anthropic  # noqa: F401
         return True
     except ImportError:
         return False
@@ -286,7 +286,7 @@ def _parse_ai_response(content: str) -> dict[str, Any]:
         json_match = re.search(r'\{.*\}', content, re.DOTALL)
         if json_match:
             return json.loads(json_match.group())
-    except:
+    except (json.JSONDecodeError, AttributeError):
         pass
 
     # Fallback to text parsing

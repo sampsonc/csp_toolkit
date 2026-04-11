@@ -980,7 +980,7 @@ def violations_cmd(
             # Implementation Notes
             impl_notes = ai_analysis.get("implementation_notes", [])
             if impl_notes:
-                console.print(f"\n[bold]Implementation Notes:[/bold]")
+                console.print("\n[bold]Implementation Notes:[/bold]")
                 for note in impl_notes:
                     console.print(f"  • {note}")
 
