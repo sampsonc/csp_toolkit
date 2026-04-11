@@ -36,6 +36,7 @@ from .output import (
 )
 from .parser import parse
 from .violations import (
+    ai_enhance_violations,
     build_patched_csp,
     parse_violations_json,
     suggest_violation_fixes,
@@ -842,6 +843,15 @@ def effective_cmd(file_path: str, fmt: str):
     help="Write patched CSP draft to this file (requires --fix-mode patch and --csp/--csp-file).",
 )
 @click.option(
+    "--ai-enhance",
+    is_flag=True,
+    help="Use AI to provide enhanced explanations and recommendations (requires ANTHROPIC_API_KEY).",
+)
+@click.option(
+    "--context",
+    help="Business context for AI analysis (e.g., 'e-commerce', 'saas', 'media-site').",
+)
+@click.option(
     "--format",
     "-o",
     "fmt",
@@ -854,6 +864,8 @@ def violations_cmd(
     csp_file: str | None,
     fix_mode: str,
     write_patch_path: str | None,
+    ai_enhance: bool,
+    context: str | None,
     fmt: str,
 ):
     """Summarize CSP violations and suggest policy fixes (with --csp/--csp-file)."""
@@ -873,6 +885,11 @@ def violations_cmd(
         policy = parse(csp_raw)
     suggestions = suggest_violation_fixes(violations, policy) if policy else []
     patched_csp = build_patched_csp(policy, suggestions) if policy and fix_mode == "patch" else None
+
+    # AI Enhancement
+    ai_analysis = None
+    if ai_enhance:
+        ai_analysis = ai_enhance_violations(violations, policy, context)
     if write_patch_path and patched_csp is None:
         click.echo(
             "Error: --write-patch requires --fix-mode patch and a CSP via --csp/--csp-file.",
@@ -892,6 +909,8 @@ def violations_cmd(
                 payload["patched_csp"] = patched_csp
                 if write_patch_path:
                     payload["patched_csp_written_to"] = write_patch_path
+        if ai_analysis:
+            payload["ai_analysis"] = ai_analysis
         click.echo(json.dumps(payload, indent=2))
         return
 
@@ -942,6 +961,38 @@ def violations_cmd(
             console.print(patched_csp)
             if write_patch_path:
                 console.print(f"[dim]Wrote patched CSP to {write_patch_path}[/dim]")
+
+    # AI Analysis Output
+    if ai_analysis:
+        if ai_analysis.get("enhanced"):
+            console.print("\n[bold magenta]🤖 AI Analysis[/bold magenta]")
+
+            # Explanation
+            explanation = ai_analysis.get("explanation", "")
+            if explanation:
+                console.print(f"\n[bold]Explanation:[/bold]\n{explanation}")
+
+            # Security Impact
+            security_impact = ai_analysis.get("security_impact", "")
+            if security_impact:
+                console.print(f"\n[bold]Security Impact:[/bold]\n{security_impact}")
+
+            # Implementation Notes
+            impl_notes = ai_analysis.get("implementation_notes", [])
+            if impl_notes:
+                console.print(f"\n[bold]Implementation Notes:[/bold]")
+                for note in impl_notes:
+                    console.print(f"  • {note}")
+
+            # Risk Assessment
+            risk = ai_analysis.get("risk_assessment", "medium")
+            risk_colors = {"low": "green", "medium": "yellow", "high": "red", "critical": "bold red"}
+            risk_color = risk_colors.get(risk.lower(), "yellow")
+            console.print(f"\n[bold]Risk Level:[/bold] [{risk_color}]{risk.upper()}[/{risk_color}]")
+        else:
+            # Show error if AI enhancement failed
+            error = ai_analysis.get("error", "Unknown AI enhancement error")
+            console.print(f"\n[yellow]AI Enhancement: {error}[/yellow]")
 
     console.print("\n[dim]Sample (first reports):[/dim]")
     for v in violations[:10]:

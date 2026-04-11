@@ -11,3 +11,4 @@ build/
 *.egg
 .eggs/
 .letta/
+CLAUDE.md

@@ -5,6 +5,21 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-04-11
+
+### Added
+
+- **AI-Enhanced Violations Analysis:** New `--ai-enhance` flag for `violations` command provides contextual explanations, security impact assessment, and implementation guidance using Claude AI.
+- **Business Context Support:** `--context` option allows specifying business type (e-commerce, saas, etc.) for more relevant AI recommendations.
+- **Enhanced JSON Output:** AI analysis included in JSON output when `--ai-enhance` is used.
+- **Optional AI Dependencies:** `anthropic` package available as optional dependency (`pip install csp-toolkit[ai]`).
+- **Comprehensive Testing:** 7 new tests covering AI enhancement features with proper error handling.
+
+### Changed
+
+- **Documentation:** Updated README.md with AI enhancement examples and installation instructions.
+- **Roadmap:** Added detailed feature roadmap with priorities for Burp Suite integration, GitHub Actions, and advanced AI features.
+
 ## [0.6.3] - 2026-04-03
 
 ### Added

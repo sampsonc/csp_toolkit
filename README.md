@@ -177,15 +177,24 @@ csp-toolkit violations reports.json
 csp-toolkit violations reports.json --csp "default-src 'self'; script-src 'self'"
 csp-toolkit violations reports.json --csp-file policy.txt
 
+# AI-enhanced analysis with explanations and recommendations
+csp-toolkit violations reports.json --csp-file policy.txt --ai-enhance --context "e-commerce"
+
 # Emit a draft policy with additive fixes (review before deploy)
 csp-toolkit violations reports.json --csp-file policy.txt --fix-mode patch
 
 # Write the draft to disk
 csp-toolkit violations reports.json --csp-file policy.txt --fix-mode patch --write-patch patched.csp
 
-# JSON: summary, suggestions, patched_csp (patch mode), patched_csp_written_to (with --write-patch)
-csp-toolkit violations reports.json --csp-file policy.txt --fix-mode patch --format json
+# JSON: summary, suggestions, patched_csp (patch mode), ai_analysis (with --ai-enhance)
+csp-toolkit violations reports.json --csp-file policy.txt --fix-mode patch --format json --ai-enhance
 ```
+
+**AI Enhancement** (requires `pip install anthropic` and `ANTHROPIC_API_KEY`):
+- **Contextual Explanations**: Understands why violations occur in business context
+- **Security Impact Assessment**: Risk scoring with detailed reasoning  
+- **Implementation Guidance**: Step-by-step deployment recommendations
+- **Smart Recommendations**: Business-aware policy suggestions beyond basic fixes
 
 **Workflow with a live site:** fetch or copy the CSP first (`csp-toolkit fetch https://example.com`), save violation JSON from your browser or `report-uri` collector, then run `violations` with `--csp-file`. Inline/script violations may suggest `'unsafe-inline'`; prefer nonces or hashes where possible.
 
@@ -402,7 +411,7 @@ Pushing a tag `v*` runs [`.github/workflows/publish.yml`](.github/workflows/publ
 # Install dev dependencies
 uv sync --all-extras
 
-# Run tests (269 tests)
+# Run tests (271 tests)
 uv run pytest -v
 
 # Same coverage gate as CI (optional locally)
