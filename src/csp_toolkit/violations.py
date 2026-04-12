@@ -163,20 +163,19 @@ def _blocked_uri_to_source(blocked_uri: str, directive_name: str) -> str | None:
 
 
 def ai_enhance_violations(
-    violations: list[dict[str, Any]],
-    policy: Policy | None = None,
-    context: str | None = None
+    violations: list[dict[str, Any]], policy: Policy | None = None, context: str | None = None
 ) -> dict[str, Any]:
     """Enhance violation analysis with AI explanations and recommendations."""
     if not _has_anthropic():
         return {
             "enhanced": False,
             "error": "anthropic package not available - install with: pip install anthropic",
-            "fallback_summary": violations_summary_json(violations)
+            "fallback_summary": violations_summary_json(violations),
         }
 
     try:
         import anthropic
+
         client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
         # Use existing analysis as foundation
@@ -190,7 +189,7 @@ def ai_enhance_violations(
         response = client.messages.create(
             model="claude-3-5-sonnet-20241022",
             max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
         )
 
         # Parse response into structured format
@@ -204,7 +203,7 @@ def ai_enhance_violations(
             "explanation": ai_analysis.get("explanation", ""),
             "security_impact": ai_analysis.get("security_impact", ""),
             "implementation_notes": ai_analysis.get("implementation_notes", []),
-            "risk_assessment": ai_analysis.get("risk_assessment", "medium")
+            "risk_assessment": ai_analysis.get("risk_assessment", "medium"),
         }
 
     except Exception as e:
@@ -212,7 +211,7 @@ def ai_enhance_violations(
             "enhanced": False,
             "error": f"AI enhancement failed: {str(e)}",
             "fallback_summary": summary,
-            "fallback_suggestions": suggestions if policy else []
+            "fallback_suggestions": suggestions if policy else [],
         }
 
 
@@ -220,6 +219,7 @@ def _has_anthropic() -> bool:
     """Check if anthropic package is available."""
     try:
         import anthropic  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -229,7 +229,7 @@ def _build_violation_analysis_prompt(
     summary: dict[str, Any],
     policy: Policy | None,
     suggestions: list[dict[str, Any]],
-    context: str | None
+    context: str | None,
 ) -> str:
     """Build structured prompt for AI violation analysis."""
 
@@ -237,24 +237,32 @@ def _build_violation_analysis_prompt(
     if policy:
         current_policy = f"Current CSP Policy: {policy.raw}"
 
-    business_context = f"Business Context: {context}" if context else "Business Context: Not specified"
+    business_context = (
+        f"Business Context: {context}" if context else "Business Context: Not specified"
+    )
 
     violation_details = ""
     for group in summary.get("groups", []):
-        violation_details += f"- {group['count']}x {group['effective_directive']}: {group['blocked_uri']}\n"
+        violation_details += (
+            f"- {group['count']}x {group['effective_directive']}: {group['blocked_uri']}\n"
+        )
 
     suggested_fixes = ""
     for suggestion in suggestions:
         action = suggestion.get("action", "")
         if action == "consider_adding_source":
-            suggested_fixes += f"- Add '{suggestion['suggested_source']}' to {suggestion['directive']}\n"
+            suggested_fixes += (
+                f"- Add '{suggestion['suggested_source']}' to {suggestion['directive']}\n"
+            )
         elif action == "manual_review":
-            suggested_fixes += f"- Manual review needed for {suggestion['directive']}: {suggestion['reason']}\n"
+            suggested_fixes += (
+                f"- Manual review needed for {suggestion['directive']}: {suggestion['reason']}\n"
+            )
 
     return f"""You are a Content Security Policy (CSP) security expert. Analyze these CSP violation reports and provide actionable recommendations.
 
 VIOLATION SUMMARY:
-Total violations: {summary.get('count', 0)}
+Total violations: {summary.get("count", 0)}
 
 {business_context}
 
@@ -283,7 +291,8 @@ def _parse_ai_response(content: str) -> dict[str, Any]:
     try:
         # Try to extract JSON from response
         import re
-        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+
+        json_match = re.search(r"\{.*\}", content, re.DOTALL)
         if json_match:
             return json.loads(json_match.group())
     except (json.JSONDecodeError, AttributeError):
@@ -294,5 +303,5 @@ def _parse_ai_response(content: str) -> dict[str, Any]:
         "explanation": content,
         "security_impact": "Analysis available in explanation text",
         "implementation_notes": ["Review AI explanation for implementation guidance"],
-        "risk_assessment": "medium"
+        "risk_assessment": "medium",
     }

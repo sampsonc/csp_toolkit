@@ -986,7 +986,12 @@ def violations_cmd(
 
             # Risk Assessment
             risk = ai_analysis.get("risk_assessment", "medium")
-            risk_colors = {"low": "green", "medium": "yellow", "high": "red", "critical": "bold red"}
+            risk_colors = {
+                "low": "green",
+                "medium": "yellow",
+                "high": "red",
+                "critical": "bold red",
+            }
             risk_color = risk_colors.get(risk.lower(), "yellow")
             console.print(f"\n[bold]Risk Level:[/bold] [{risk_color}]{risk.upper()}[/{risk_color}]")
         else:
