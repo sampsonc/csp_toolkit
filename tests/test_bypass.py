@@ -238,3 +238,59 @@ class TestVerifyLiveEndpoints:
         result = _verify_live_endpoints(findings, timeout=0.1)
         assert len(result) == 1
         assert "[UNVERIFIED]" in result[0].title or "[LIVE]" in result[0].title
+
+    def test_probe_delay_sleeps_between_probes(self, monkeypatch):
+        """probe_delay should sleep (n-1) times for n probes."""
+        import csp_toolkit.bypass as bypass_mod
+
+        sleep_calls: list[float] = []
+        monkeypatch.setattr(bypass_mod.time, "sleep", lambda s: sleep_calls.append(s))
+        monkeypatch.setattr(bypass_mod, "probe_jsonp_endpoint", lambda url, timeout=5.0: False)
+
+        findings = [
+            Finding(
+                severity=Severity.HIGH,
+                title=f"JSONP bypass via example{i}.com",
+                description=(
+                    f"payload: <script src='https://example{i}.com/jsonp?callback="
+                    f"alert(document.domain)//'></script>"
+                ),
+                bypass_type="jsonp",
+                directive="script-src",
+            )
+            for i in range(3)
+        ]
+        _verify_live_endpoints(findings, probe_delay=0.5)
+        assert sleep_calls == [0.5, 0.5]
+
+    def test_probe_delay_zero_does_not_sleep(self, monkeypatch):
+        import csp_toolkit.bypass as bypass_mod
+
+        sleep_calls: list[float] = []
+        monkeypatch.setattr(bypass_mod.time, "sleep", lambda s: sleep_calls.append(s))
+        monkeypatch.setattr(bypass_mod, "probe_jsonp_endpoint", lambda url, timeout=5.0: False)
+
+        findings = [
+            Finding(
+                severity=Severity.HIGH,
+                title="JSONP bypass via example.com",
+                description=(
+                    "payload: <script src='https://example.com/jsonp?callback="
+                    "alert(document.domain)//'></script>"
+                ),
+                bypass_type="jsonp",
+                directive="script-src",
+            ),
+            Finding(
+                severity=Severity.HIGH,
+                title="JSONP bypass via other.com",
+                description=(
+                    "payload: <script src='https://other.com/jsonp?callback="
+                    "alert(document.domain)//'></script>"
+                ),
+                bypass_type="jsonp",
+                directive="script-src",
+            ),
+        ]
+        _verify_live_endpoints(findings, probe_delay=0.0)
+        assert sleep_calls == []

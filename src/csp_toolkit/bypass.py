@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -10,6 +12,8 @@ import httpx
 
 from .models import Finding, Policy, Severity, SourceType
 from .parser import parse
+
+logger = logging.getLogger(__name__)
 
 _DATA_DIR = Path(__file__).parent / "data"
 
@@ -33,7 +37,11 @@ def _load_bypass_patterns() -> dict:
 
 
 def find_bypasses(
-    policy: Policy, *, check_live: bool = False, timeout: float = 5.0
+    policy: Policy,
+    *,
+    check_live: bool = False,
+    timeout: float = 5.0,
+    probe_delay: float = 0.0,
 ) -> list[Finding]:
     """Enumerate potential CSP bypasses for a given policy.
 
@@ -41,6 +49,9 @@ def find_bypasses(
         policy: The parsed CSP policy to check.
         check_live: If True, probe JSONP endpoints to verify they are live.
         timeout: HTTP timeout for live checks (seconds).
+        probe_delay: Seconds to sleep between live-probe HTTP requests. Useful
+            for being polite to third-party JSONP hosts when a policy has many
+            whitelisted domains. Only applies when ``check_live`` is True.
     """
     if not policy.directives:
         return []
@@ -56,14 +67,16 @@ def find_bypasses(
     findings.extend(_check_arbitrary_hosting_bypass(policy))
 
     if check_live:
-        findings = _verify_live_endpoints(findings, timeout=timeout)
+        findings = _verify_live_endpoints(findings, timeout=timeout, probe_delay=probe_delay)
 
     return findings
 
 
-def find_bypasses_header(header: str, *, check_live: bool = False) -> list[Finding]:
+def find_bypasses_header(
+    header: str, *, check_live: bool = False, probe_delay: float = 0.0
+) -> list[Finding]:
     """Convenience: parse a raw CSP header and find bypasses."""
-    return find_bypasses(parse(header), check_live=check_live)
+    return find_bypasses(parse(header), check_live=check_live, probe_delay=probe_delay)
 
 
 def check_domain_jsonp(domain: str) -> list[dict]:
@@ -378,26 +391,41 @@ def probe_jsonp_endpoint(url: str, *, timeout: float = 5.0) -> bool:
     """Probe a JSONP endpoint to check if it responds with executable JS.
 
     Returns True if the endpoint appears to reflect the callback parameter.
+
+    Network/SSL/DNS/timeout failures are treated as "not verified" and logged at
+    DEBUG level — enable logging to diagnose probes that come back UNVERIFIED.
     """
     try:
         resp = httpx.get(url, timeout=timeout, follow_redirects=True)
+        if resp.history:
+            chain = " -> ".join(str(r.url) for r in resp.history)
+            logger.debug("Probe %s followed redirects: %s -> %s", url, chain, resp.url)
         content_type = resp.headers.get("content-type", "")
         body = resp.text[:500]
         # Check if callback was reflected — look for our marker in the response
         if resp.status_code == 200 and ("cspProbe" in body or "javascript" in content_type.lower()):
             return True
-    except (httpx.HTTPError, httpx.TimeoutException):
-        pass
+    except (httpx.HTTPError, httpx.TimeoutException) as exc:
+        logger.debug("Probe %s failed: %s: %s", url, type(exc).__name__, exc)
     return False
 
 
-def _verify_live_endpoints(findings: list[Finding], *, timeout: float = 5.0) -> list[Finding]:
+def _verify_live_endpoints(
+    findings: list[Finding], *, timeout: float = 5.0, probe_delay: float = 0.0
+) -> list[Finding]:
     """Filter JSONP findings by probing endpoints to see if they are live.
 
     Non-JSONP findings are passed through unchanged. JSONP findings are annotated
     with [LIVE] or [UNVERIFIED] in the title.
+
+    Args:
+        findings: Findings produced by :func:`find_bypasses`.
+        timeout: Per-request HTTP timeout in seconds.
+        probe_delay: Seconds to sleep between probes. Skipped before the first
+            probe and after the last one.
     """
     verified: list[Finding] = []
+    probe_count = 0
 
     for f in findings:
         if f.bypass_type != "jsonp":
@@ -423,6 +451,9 @@ def _verify_live_endpoints(findings: list[Finding], *, timeout: float = 5.0) -> 
                 probe_url = probe_url.replace("alert(document.domain)//", "cspProbe//")
 
         if probe_url:
+            if probe_delay > 0 and probe_count > 0:
+                time.sleep(probe_delay)
+            probe_count += 1
             is_live = probe_jsonp_endpoint(probe_url, timeout=timeout)
             status = "[LIVE]" if is_live else "[UNVERIFIED]"
         else:

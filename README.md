@@ -7,9 +7,9 @@ A Python library and CLI tool for security researchers and bug bounty hunters. A
 ## Install
 
 ```bash
-pip install -e .
+pip install csp-toolkit
 # or with uv
-uv pip install -e .
+uv pip install csp-toolkit
 ```
 
 ## CLI Commands

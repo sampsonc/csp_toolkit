@@ -173,6 +173,12 @@ def analyze_cmd(csp: str | None, file_path: str | None, fmt: str, report_only: b
 )
 @click.option("--no-verify-ssl", is_flag=True, help="Skip SSL certificate verification")
 @click.option("--check-live", is_flag=True, help="Probe JSONP endpoints to verify they are live")
+@click.option(
+    "--probe-delay",
+    type=float,
+    default=0.0,
+    help="Seconds to sleep between live probes (politeness; only with --check-live)",
+)
 def fetch(
     urls: tuple[str, ...],
     do_analyze: bool,
@@ -181,6 +187,7 @@ def fetch(
     fmt: str,
     no_verify_ssl: bool,
     check_live: bool,
+    probe_delay: float,
 ):
     """Fetch and display CSP headers from one or more URLs."""
     for url_idx, url in enumerate(urls):
@@ -220,7 +227,9 @@ def fetch(
 
             if do_all or do_bypass:
                 console.print("\n[bold]Bypass Findings:[/bold]")
-                bypasses = find_bypasses(policy, check_live=check_live)
+                bypasses = find_bypasses(
+                    policy, check_live=check_live, probe_delay=probe_delay
+                )
                 _output_findings(bypasses, fmt, stable_json_tool="csp_bypass")
 
         if result.security_headers:
@@ -239,12 +248,24 @@ def fetch(
     default="detail",
 )
 @click.option("--check-live", is_flag=True, help="Probe JSONP endpoints to verify they are live")
-def bypass_cmd(csp: str | None, file_path: str | None, fmt: str, check_live: bool):
+@click.option(
+    "--probe-delay",
+    type=float,
+    default=0.0,
+    help="Seconds to sleep between live probes (politeness; only with --check-live)",
+)
+def bypass_cmd(
+    csp: str | None,
+    file_path: str | None,
+    fmt: str,
+    check_live: bool,
+    probe_delay: float,
+):
     """Find potential CSP bypasses."""
     raw = _read_csp_input(csp, file_path)
     policy = parse(raw)
 
-    findings = find_bypasses(policy, check_live=check_live)
+    findings = find_bypasses(policy, check_live=check_live, probe_delay=probe_delay)
     _output_findings(findings, fmt, stable_json_tool="csp_bypass")
 
     if fmt not in ("json", "json-v1", "sarif"):
