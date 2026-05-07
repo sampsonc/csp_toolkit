@@ -227,9 +227,7 @@ def fetch(
 
             if do_all or do_bypass:
                 console.print("\n[bold]Bypass Findings:[/bold]")
-                bypasses = find_bypasses(
-                    policy, check_live=check_live, probe_delay=probe_delay
-                )
+                bypasses = find_bypasses(policy, check_live=check_live, probe_delay=probe_delay)
                 _output_findings(bypasses, fmt, stable_json_tool="csp_bypass")
 
         if result.security_headers:
