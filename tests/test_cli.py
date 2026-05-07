@@ -367,9 +367,12 @@ class TestAutoCommand:
 
 class TestVersionFlag:
     def test_version(self):
+        from csp_toolkit._version import __version__
+
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "0.7.0" in result.output
+        assert __version__ in result.output
+        assert "csp-toolkit" in result.output
 
 
 class TestBugBountyCli:
