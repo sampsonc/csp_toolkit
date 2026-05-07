@@ -5,6 +5,18 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-05-07
+
+### Added
+
+- **Live-probe pacing:** `find_bypasses` / `find_bypasses_header` accept a new `probe_delay` parameter (seconds) that sleeps between JSONP liveness probes when `check_live=True`. Exposed on the CLI as `--probe-delay <seconds>` for `csp-toolkit fetch` and `csp-toolkit bypass`.
+- **Probe observability:** `probe_jsonp_endpoint` now emits `DEBUG`-level log records for failed probes (recording the exception type and message) and for redirect chains followed during a probe. No behavior change at the default log level.
+- **Tests:** New tests verifying `probe_delay` sleeps `n - 1` times for `n` probes and never sleeps when `probe_delay=0`.
+
+### Changed
+
+- **README:** Install instructions updated to use `pip install csp-toolkit` / `uv pip install csp-toolkit` instead of the editable local install.
+
 ## [0.7.0] - 2026-04-11
 
 ### Added
@@ -101,6 +113,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release: CSP parse/analyze/bypass/scan/diff/subdomains/monitor, CLI, browser extension, Nuclei templates.
 
+[0.7.1]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.7.1
+[0.7.0]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.7.0
 [0.6.3]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.6.3
 [0.6.2]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.6.2
 [0.6.1]: https://github.com/sampsonc/csp_toolkit/releases/tag/v0.6.1
