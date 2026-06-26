@@ -12,40 +12,44 @@ Security-research and bug-bounty oriented work for **csp-toolkit**. Priorities a
 
 Details: [CHANGELOG.md](CHANGELOG.md) (0.6.0).
 
-## In Progress — 0.7.0
+## Shipped — 0.7.x
 
-| Priority | Theme | Status |
-|----------|-------|---------|
-| **P1** | AI-Enhanced Violations | 🚧 LLM integration for violation explanations and smart policy fixes |
+| Version | Theme | Delivered |
+|---------|-------|-----------|
+| **0.7.0** | AI-Enhanced Violations | `violations --ai-enhance` for contextual explanations, impact assessment, and fix guidance via Claude; `--context <business-type>`; AI output in JSON; optional `csp-toolkit[ai]` extra. |
+| **0.7.1** | Live-probe pacing & observability | `--probe-delay` for `fetch` / `bypass` (sleeps between JSONP liveness probes); `DEBUG` logging for failed probes and redirect chains. |
+| **0.7.2** | CI hardening | Version test reads `__version__` from package metadata so patch releases no longer break CI. |
+
+Details: [CHANGELOG.md](CHANGELOG.md) (0.7.0–0.7.2).
 
 ## Planned — Future Releases
 
 ### High Priority
 | Priority | Theme | Description |
 |----------|-------|-------------|
-| **P2** | Burp Suite Integration | Browser extension for real-time CSP analysis in Burp Suite |
-| **P3** | GitHub Actions/CI Integration | Policy enforcement in CI/CD pipelines |
+| **P1** | GitHub Actions/CI Integration | Reusable composite action wrapping `analyze` with SARIF upload and exit-code policy gating. |
+| **P2** | Burp Suite Integration | Browser extension for real-time CSP analysis in Burp Suite. |
 
 ### Medium Priority  
 | Priority | Theme | Description |
 |----------|-------|-------------|
-| **P4** | AI Policy Recommendations | Full LLM-powered CSP policy generation with business context |
-| **P5** | Real-time Bypass Intelligence | Auto-updating bypass database from threat intelligence |
-| **P6** | Advanced Reporting | Executive dashboards and trend analysis |
+| **P3** | AI Policy Recommendations | Full LLM-powered CSP policy generation with business context. |
+| **P4** | Real-time Bypass Intelligence | Auto-updating bypass database from threat intelligence. |
+| **P5** | Advanced Reporting | Executive dashboards and trend analysis. |
 
 ### Integration & Automation
 | Priority | Theme | Description |
 |----------|-------|-------------|
-| **P7** | Security Tool Integration | ZAP, Nessus, OpenVAS plugin formats |
-| **P8** | Cloud Security Integration | AWS CloudFront, Azure Front Door, Cloudflare analysis |
-| **P9** | Supply Chain Security | Third-party script analysis and SBOM integration |
-| **P10** | Performance Analysis | CSP impact on page load with Lighthouse integration |
+| **P6** | Security Tool Integration | ZAP, Nessus, OpenVAS plugin formats. |
+| **P7** | Cloud Security Integration | AWS CloudFront, Azure Front Door, Cloudflare analysis. |
+| **P8** | Supply Chain Security | Third-party script analysis and SBOM integration. |
+| **P9** | Performance Analysis | CSP impact on page load with Lighthouse integration. |
 
 ### Research & Innovation
 | Priority | Theme | Description |
 |----------|-------|-------------|
-| **P11** | ML Bypass Detection | Machine learning models for bypass pattern prediction |
-| **P12** | Anomaly Detection | Unusual policy combination analysis |
+| **P10** | ML Bypass Detection | Machine learning models for bypass pattern prediction. |
+| **P11** | Anomaly Detection | Unusual policy combination analysis. |
 
 ## Legacy Future Items
 - **Combine semantics:** Document edge cases; optional stricter modes or union paths where research needs differ from “effective minimum.”
