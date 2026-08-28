@@ -151,6 +151,29 @@ def _apply_gate(
     return failed
 
 
+def _gate_policy(
+    policy: Policy,
+    findings: list,
+    *,
+    fail_on: str | None,
+    min_grade: str | None,
+    grade: str | None,
+    label: str = "",
+) -> bool:
+    """Apply gates to one policy, skipping Report-Only.
+
+    A Report-Only header is advisory — the browser reports violations but blocks
+    nothing — so a weakness in one is not exploitable and must never fail a
+    build. Findings are still reported.
+    """
+    if policy.report_only:
+        if fail_on or min_grade:
+            prefix = f"{label}: " if label else ""
+            click.echo(f"{prefix}skipping gate for Report-Only policy", err=True)
+        return False
+    return _apply_gate(findings, fail_on=fail_on, min_grade=min_grade, grade=grade, label=label)
+
+
 def _write_output(text: str, output_path: str | None) -> None:
     """Write machine-readable output to a file, or stdout when no path is given."""
     if output_path:
@@ -250,7 +273,7 @@ def analyze_cmd(
 
     if fmt in ("json-v1", "sarif"):
         _output_findings(findings, fmt, stable_json_tool="csp_analyze", output_path=output_path)
-        if _apply_gate(findings, fail_on=fail_on, min_grade=min_grade, grade=grade):
+        if _gate_policy(policy, findings, fail_on=fail_on, min_grade=min_grade, grade=grade):
             sys.exit(GATE_EXIT_CODE)
         return
 
@@ -271,7 +294,7 @@ def analyze_cmd(
             parts = [f"{v} {k}" for k, v in counts.items()]
             console.print(f"[bold]Total: {len(findings)} findings[/bold] ({', '.join(parts)})")
 
-    if _apply_gate(findings, fail_on=fail_on, min_grade=min_grade, grade=grade):
+    if _gate_policy(policy, findings, fail_on=fail_on, min_grade=min_grade, grade=grade):
         sys.exit(GATE_EXIT_CODE)
 
 
@@ -389,21 +412,15 @@ def fetch(
                 if fmt not in ("json", "json-v1", "sarif"):
                     format_grade(grade, score, console)
 
-                if gating:
-                    # Report-Only policies are advisory, so they never fail the build.
-                    if policy.report_only:
-                        click.echo(
-                            f"{url} (policy #{i + 1}): skipping gate for Report-Only policy",
-                            err=True,
-                        )
-                    elif _apply_gate(
-                        findings,
-                        fail_on=fail_on,
-                        min_grade=min_grade,
-                        grade=grade,
-                        label=f"{url} (policy #{i + 1})",
-                    ):
-                        gate_failed = True
+                if gating and _gate_policy(
+                    policy,
+                    findings,
+                    fail_on=fail_on,
+                    min_grade=min_grade,
+                    grade=grade,
+                    label=f"{url} (policy #{i + 1})",
+                ):
+                    gate_failed = True
 
             if do_all or do_bypass:
                 console.print("\n[bold]Bypass Findings:[/bold]")

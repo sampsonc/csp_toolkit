@@ -683,3 +683,42 @@ class TestFetchGating:
         )
         assert result.exit_code == 0
         assert len(json.loads(target.read_text())["runs"][0]["results"]) > 0
+
+
+class TestReportOnlyNeverGated:
+    """A Report-Only header blocks nothing, so it must never fail a build."""
+
+    def test_analyze_report_only_is_not_gated(self):
+        result = runner.invoke(
+            main, ["analyze", "--report-only", WEAK_POLICY, "--fail-on", "critical"]
+        )
+        assert result.exit_code == 0
+
+    def test_analyze_report_only_ignores_min_grade(self):
+        result = runner.invoke(main, ["analyze", "--report-only", WEAK_POLICY, "--min-grade", "A+"])
+        assert result.exit_code == 0
+
+    def test_analyze_enforced_still_gates(self):
+        result = runner.invoke(main, ["analyze", WEAK_POLICY, "--fail-on", "critical"])
+        assert result.exit_code == GATE_EXIT
+
+    def test_report_only_findings_are_still_reported(self):
+        import json
+
+        result = runner.invoke(
+            main, ["analyze", "--report-only", WEAK_POLICY, "--format", "json-v1"]
+        )
+        assert result.exit_code == 0
+        assert len(json.loads(result.output)["findings"]) > 0
+
+    def test_analyze_and_fetch_agree_on_report_only(self, httpx_mock):
+        """The same weak policy must gate as enforced and pass as Report-Only, both ways."""
+        httpx_mock.add_response(
+            url="https://example.com",
+            headers={"content-security-policy-report-only": WEAK_POLICY},
+        )
+        via_fetch = runner.invoke(main, ["fetch", "https://example.com", "--fail-on", "critical"])
+        via_analyze = runner.invoke(
+            main, ["analyze", "--report-only", WEAK_POLICY, "--fail-on", "critical"]
+        )
+        assert via_fetch.exit_code == via_analyze.exit_code == 0

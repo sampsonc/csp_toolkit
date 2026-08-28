@@ -490,7 +490,7 @@ Pushing a tag `v*` runs [`.github/workflows/publish.yml`](.github/workflows/publ
 # Install dev dependencies
 uv sync --all-extras
 
-# Run tests (298 tests)
+# Run tests (303 tests)
 uv run pytest -v
 
 # Same coverage gate as CI (optional locally)

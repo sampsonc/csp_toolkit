@@ -5,6 +5,12 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-08-28
+
+### Fixed
+
+- **Report-Only policies are no longer gated by `analyze`.** `fetch` already skipped gating for Report-Only policies, but `analyze --report-only --fail-on <severity>` still exited 3, contradicting the documented behavior. A Report-Only header blocks nothing, so a weakness in one is not exploitable and must never fail a build. Both commands now route through one `_gate_policy` helper, so they cannot drift apart again. Findings are still reported either way.
+
 ## [0.8.0] - 2026-08-28
 
 ### Added
