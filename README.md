@@ -81,7 +81,21 @@ csp-toolkit fetch https://example.com --all --check-live
 
 # Skip SSL verification
 csp-toolkit fetch https://example.com --all --no-verify-ssl
+
+# CI gating against a live target (exit 3 on a violated gate)
+csp-toolkit fetch https://staging.example.com --fail-on high --min-grade B
+
+# Fail when a target serves no CSP at all
+csp-toolkit fetch https://example.com --fail-on-missing-csp
+
+# Pool findings from every URL into one SARIF report
+csp-toolkit fetch https://a.example.com https://b.example.com \
+  --analyze -o sarif --output csp.sarif
 ```
+
+`--fail-on` and `--min-grade` imply `--analyze`, and use the same exit codes as
+`analyze` (`3` = gate violated). Report-Only policies are reported but never
+gated — they are advisory by definition.
 
 ### `scan` — Batch scan and rank targets
 
@@ -476,7 +490,7 @@ Pushing a tag `v*` runs [`.github/workflows/publish.yml`](.github/workflows/publ
 # Install dev dependencies
 uv sync --all-extras
 
-# Run tests (271 tests)
+# Run tests (298 tests)
 uv run pytest -v
 
 # Same coverage gate as CI (optional locally)

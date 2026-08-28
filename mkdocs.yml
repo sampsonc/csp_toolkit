@@ -1,0 +1,77 @@
+site_name: csp-toolkit
+site_description: >-
+  Content Security Policy analysis, bypass detection, and CI gating.
+  21 weakness checks with A+ to F grading, 79 known bypass domains, SARIF output.
+site_url: https://sampsonc.github.io/csp_toolkit/
+repo_url: https://github.com/sampsonc/csp_toolkit
+repo_name: sampsonc/csp_toolkit
+edit_uri: ""
+
+# docs/ is generated from README.md by tools/build_docs.py — edit the README, not these files.
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+    - search.suggest
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - CLI:
+      - Analysis: cli/analysis.md
+      - Live targets: cli/live-targets.md
+      - Generation and repair: cli/generation.md
+      - Active probes: cli/probes.md
+  - CI:
+      - GitHub Action: ci/github-action.md
+  - Reference:
+      - Library usage: library.md
+      - Analyzer checks: checks.md
+      - Bypass database: bypass-database.md
+      - Integrations: integrations.md
+  - Development: development.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/sampsonc/csp_toolkit
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/csp-toolkit/
