@@ -18,7 +18,7 @@ from .diff import diff_headers
 from .discover import discover_resources, generate_csp
 from .fetcher import FetchResult, fetch_csp
 from .generator import CSPBuilder
-from .models import Policy
+from .models import Policy, Severity
 from .probes import (
     NonceReuseStatus,
     analyze_report_uri,
@@ -83,14 +83,101 @@ def _read_csp_input(csp: str | None, file: str | None) -> str:
     sys.exit(1)
 
 
-def _output_findings(findings: list, fmt: str, *, stable_json_tool: str = "csp_analyze") -> None:
-    """Output findings in the requested format."""
+# Ordered most severe first; used by --fail-on threshold comparisons.
+_SEVERITY_ORDER = [
+    Severity.CRITICAL,
+    Severity.HIGH,
+    Severity.MEDIUM,
+    Severity.LOW,
+    Severity.INFO,
+]
+
+# Ordered best first; used by --min-grade threshold comparisons.
+_GRADE_ORDER = ["A+", "A", "B", "C", "D", "F"]
+
+FAIL_ON_CHOICES = [s.value for s in _SEVERITY_ORDER] + ["none"]
+
+# Exit code for a violated policy gate. Deliberately not 1 (runtime error) or 2
+# (Click usage error) so CI can tell a real failure from a policy regression.
+GATE_EXIT_CODE = 3
+
+
+def _findings_at_or_above(findings: list, threshold: str) -> list:
+    """Return findings whose severity is at least as severe as *threshold*."""
+    if threshold == "none":
+        return []
+    cutoff = _SEVERITY_ORDER.index(Severity(threshold))
+    return [f for f in findings if _SEVERITY_ORDER.index(f.severity) <= cutoff]
+
+
+def _grade_below(grade: str, minimum: str) -> bool:
+    """True when *grade* is worse than *minimum* (both letter grades)."""
+    return _GRADE_ORDER.index(grade) > _GRADE_ORDER.index(minimum)
+
+
+def _apply_gate(
+    findings: list,
+    *,
+    fail_on: str | None,
+    min_grade: str | None,
+    grade: str | None,
+    label: str = "",
+) -> bool:
+    """Report gate violations on stderr. Returns True if any gate failed."""
+    failed = False
+    prefix = f"{label}: " if label else ""
+
+    if fail_on:
+        offending = _findings_at_or_above(findings, fail_on)
+        if offending:
+            counts: dict[str, int] = {}
+            for f in offending:
+                counts[f.severity.value] = counts.get(f.severity.value, 0) + 1
+            detail = ", ".join(
+                f"{counts[s.value]} {s.value}" for s in _SEVERITY_ORDER if s.value in counts
+            )
+            click.echo(
+                f"{prefix}FAIL: {len(offending)} finding(s) at or above '{fail_on}' ({detail})",
+                err=True,
+            )
+            failed = True
+
+    if min_grade and grade is not None and _grade_below(grade, min_grade):
+        click.echo(
+            f"{prefix}FAIL: grade {grade} is below the required minimum {min_grade}", err=True
+        )
+        failed = True
+
+    return failed
+
+
+def _write_output(text: str, output_path: str | None) -> None:
+    """Write machine-readable output to a file, or stdout when no path is given."""
+    if output_path:
+        with open(output_path, "w") as fh:
+            fh.write(text + "\n")
+    else:
+        click.echo(text)
+
+
+def _output_findings(
+    findings: list,
+    fmt: str,
+    *,
+    stable_json_tool: str = "csp_analyze",
+    output_path: str | None = None,
+) -> None:
+    """Output findings in the requested format.
+
+    *output_path* redirects machine-readable formats to a file; console formats
+    always render to the terminal.
+    """
     if fmt == "json":
-        click.echo(format_findings_json(findings))
+        _write_output(format_findings_json(findings), output_path)
     elif fmt == "json-v1":
-        click.echo(format_findings_stable_json(findings, tool=stable_json_tool))
+        _write_output(format_findings_stable_json(findings, tool=stable_json_tool), output_path)
     elif fmt == "sarif":
-        click.echo(format_findings_sarif_json(findings))
+        _write_output(format_findings_sarif_json(findings), output_path)
     elif fmt == "detail":
         format_findings_detail(findings, console)
     else:
@@ -126,25 +213,55 @@ def main():
     default="table",
 )
 @click.option("--report-only", is_flag=True, help="Treat as Report-Only header")
-def analyze_cmd(csp: str | None, file_path: str | None, fmt: str, report_only: bool):
+@click.option(
+    "--fail-on",
+    type=click.Choice(FAIL_ON_CHOICES),
+    default=None,
+    help="Exit non-zero if any finding is at or above this severity",
+)
+@click.option(
+    "--min-grade",
+    type=click.Choice(_GRADE_ORDER),
+    default=None,
+    help="Exit non-zero if the policy grade is below this letter grade",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(dir_okay=False, writable=True),
+    default=None,
+    help="Write json/json-v1/sarif output to this file instead of stdout",
+)
+def analyze_cmd(
+    csp: str | None,
+    file_path: str | None,
+    fmt: str,
+    report_only: bool,
+    fail_on: str | None,
+    min_grade: str | None,
+    output_path: str | None,
+):
     """Analyze a CSP header for weaknesses."""
     raw = _read_csp_input(csp, file_path)
     policy = parse(raw, report_only=report_only)
 
     findings = analyze(policy)
+    grade, score = score_policy(policy)
+
     if fmt in ("json-v1", "sarif"):
-        _output_findings(findings, fmt, stable_json_tool="csp_analyze")
+        _output_findings(findings, fmt, stable_json_tool="csp_analyze", output_path=output_path)
+        if _apply_gate(findings, fail_on=fail_on, min_grade=min_grade, grade=grade):
+            sys.exit(GATE_EXIT_CODE)
         return
 
     console.print()
     format_policy_summary(policy, console)
     console.print()
 
-    _output_findings(findings, fmt, stable_json_tool="csp_analyze")
+    _output_findings(findings, fmt, stable_json_tool="csp_analyze", output_path=output_path)
 
     # Grade and summary
-    if fmt not in ("json", "json-v1", "sarif"):
-        grade, score = score_policy(policy)
+    if fmt != "json":
         format_grade(grade, score, console)
 
         counts = {}
@@ -153,6 +270,9 @@ def analyze_cmd(csp: str | None, file_path: str | None, fmt: str, report_only: b
         if counts:
             parts = [f"{v} {k}" for k, v in counts.items()]
             console.print(f"[bold]Total: {len(findings)} findings[/bold] ({', '.join(parts)})")
+
+    if _apply_gate(findings, fail_on=fail_on, min_grade=min_grade, grade=grade):
+        sys.exit(GATE_EXIT_CODE)
 
 
 @main.command()
@@ -179,6 +299,30 @@ def analyze_cmd(csp: str | None, file_path: str | None, fmt: str, report_only: b
     default=0.0,
     help="Seconds to sleep between live probes (politeness; only with --check-live)",
 )
+@click.option(
+    "--fail-on",
+    type=click.Choice(FAIL_ON_CHOICES),
+    default=None,
+    help="Exit non-zero if any finding is at or above this severity (implies --analyze)",
+)
+@click.option(
+    "--min-grade",
+    type=click.Choice(_GRADE_ORDER),
+    default=None,
+    help="Exit non-zero if any policy grade is below this letter grade (implies --analyze)",
+)
+@click.option(
+    "--fail-on-missing-csp",
+    is_flag=True,
+    help="Exit non-zero if a URL serves no CSP header at all",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(dir_okay=False, writable=True),
+    default=None,
+    help="Write json/json-v1/sarif findings to this file instead of stdout",
+)
 def fetch(
     urls: tuple[str, ...],
     do_analyze: bool,
@@ -188,8 +332,20 @@ def fetch(
     no_verify_ssl: bool,
     check_live: bool,
     probe_delay: float,
+    fail_on: str | None,
+    min_grade: str | None,
+    fail_on_missing_csp: bool,
+    output_path: str | None,
 ):
     """Fetch and display CSP headers from one or more URLs."""
+    gating = fail_on is not None or min_grade is not None
+    if gating:
+        do_analyze = True
+
+    gate_failed = False
+    # Findings are pooled across URLs/policies so a single --output file covers the whole run.
+    collected: list = []
+
     for url_idx, url in enumerate(urls):
         if url_idx > 0:
             console.print("\n" + "=" * 70 + "\n")
@@ -198,6 +354,9 @@ def fetch(
             result = fetch_csp(url, verify_ssl=not no_verify_ssl)
         except Exception as e:
             console.print(f"[red]Error fetching {url}: {e}[/red]")
+            if gating or fail_on_missing_csp:
+                click.echo(f"{url}: FAIL: fetch error: {e}", err=True)
+                gate_failed = True
             continue
 
         console.print(f"\n[bold]URL:[/bold] {result.url}")
@@ -208,6 +367,9 @@ def fetch(
         if not result.policies:
             console.print("\n[yellow]No CSP found on this page.[/yellow]")
             format_security_headers(result.security_headers, console)
+            if fail_on_missing_csp:
+                click.echo(f"{url}: FAIL: no CSP header served", err=True)
+                gate_failed = True
             continue
 
         for i, policy in enumerate(result.policies):
@@ -219,20 +381,46 @@ def fetch(
             if do_all or do_analyze:
                 console.print("\n[bold]Analysis:[/bold]")
                 findings = analyze(policy)
-                _output_findings(findings, fmt, stable_json_tool="csp_analyze")
+                collected.extend(findings)
+                if not output_path:
+                    _output_findings(findings, fmt, stable_json_tool="csp_analyze")
 
+                grade, score = score_policy(policy)
                 if fmt not in ("json", "json-v1", "sarif"):
-                    grade, score = score_policy(policy)
                     format_grade(grade, score, console)
+
+                if gating:
+                    # Report-Only policies are advisory, so they never fail the build.
+                    if policy.report_only:
+                        click.echo(
+                            f"{url} (policy #{i + 1}): skipping gate for Report-Only policy",
+                            err=True,
+                        )
+                    elif _apply_gate(
+                        findings,
+                        fail_on=fail_on,
+                        min_grade=min_grade,
+                        grade=grade,
+                        label=f"{url} (policy #{i + 1})",
+                    ):
+                        gate_failed = True
 
             if do_all or do_bypass:
                 console.print("\n[bold]Bypass Findings:[/bold]")
                 bypasses = find_bypasses(policy, check_live=check_live, probe_delay=probe_delay)
-                _output_findings(bypasses, fmt, stable_json_tool="csp_bypass")
+                collected.extend(bypasses)
+                if not output_path:
+                    _output_findings(bypasses, fmt, stable_json_tool="csp_bypass")
 
         if result.security_headers:
             console.print()
             format_security_headers(result.security_headers, console)
+
+    if output_path:
+        _output_findings(collected, fmt, stable_json_tool="csp_analyze", output_path=output_path)
+
+    if gate_failed:
+        sys.exit(GATE_EXIT_CODE)
 
 
 @main.command("bypass")
