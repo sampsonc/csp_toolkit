@@ -8,7 +8,10 @@ name: Publish to PyPI
 on:
   push:
     tags:
-      - "v*"
+      # Semver release tags only. This deliberately excludes moving major-version
+      # tags like `v1`, which mark the GitHub Action and would otherwise trigger a
+      # duplicate publish that PyPI rejects.
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
   contents: read
