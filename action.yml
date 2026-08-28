@@ -1,0 +1,172 @@
+name: "CSP Toolkit"
+description: "Analyze a Content Security Policy for weaknesses, gate the build on severity or grade, and upload SARIF to GitHub code scanning."
+author: "Carl Sampson"
+
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  url:
+    description: "URL to fetch and analyze. Mutually exclusive with `policy` and `policy-file`."
+    required: false
+  policy:
+    description: "CSP header string to analyze. Mutually exclusive with `url` and `policy-file`."
+    required: false
+  policy-file:
+    description: "Path to a file containing a CSP header string. Mutually exclusive with `url` and `policy`."
+    required: false
+  fail-on:
+    description: "Fail the build if any finding is at or above this severity: critical, high, medium, low, info, or none."
+    required: false
+    default: "high"
+  min-grade:
+    description: "Fail the build if the policy grade is below this letter grade (A+, A, B, C, D, F). Empty disables the grade gate."
+    required: false
+    default: ""
+  fail-on-missing-csp:
+    description: "When analyzing a URL, fail if the response serves no CSP header at all."
+    required: false
+    default: "false"
+  bypass:
+    description: "Also run the bypass finder (JSONP and CDN gadget detection) and include its findings."
+    required: false
+    default: "false"
+  report-only:
+    description: "Treat a `policy`/`policy-file` input as a Report-Only header."
+    required: false
+    default: "false"
+  upload-sarif:
+    description: "Upload the SARIF report to GitHub code scanning. Requires the `security-events: write` permission."
+    required: false
+    default: "true"
+  sarif-file:
+    description: "Path to write the SARIF report to."
+    required: false
+    default: "csp-toolkit.sarif"
+  version:
+    description: "Version of csp-toolkit to install from PyPI. Use `latest` for the newest release, or `local` to install from the checked-out repository (for testing this action against unreleased code). Requires csp-toolkit >= 0.8.0."
+    required: false
+    default: "latest"
+  working-directory:
+    description: "Directory to install from when `version` is `local`."
+    required: false
+    default: "."
+  python-version:
+    description: "Python version used to run csp-toolkit."
+    required: false
+    default: "3.12"
+
+outputs:
+  sarif-file:
+    description: "Path to the generated SARIF report."
+    value: ${{ inputs.sarif-file }}
+  passed:
+    description: "`true` when every configured gate passed, `false` otherwise."
+    value: ${{ steps.analyze.outputs.passed }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install csp-toolkit
+      shell: bash
+      run: |
+        case "${{ inputs.version }}" in
+          latest)
+            python -m pip install --disable-pip-version-check --quiet csp-toolkit
+            ;;
+          local)
+            python -m pip install --disable-pip-version-check --quiet "${{ inputs.working-directory }}"
+            ;;
+          *)
+            python -m pip install --disable-pip-version-check --quiet "csp-toolkit==${{ inputs.version }}"
+            ;;
+        esac
+        csp-toolkit --version
+
+    - name: Analyze CSP
+      id: analyze
+      shell: bash
+      env:
+        INPUT_URL: ${{ inputs.url }}
+        INPUT_POLICY: ${{ inputs.policy }}
+        INPUT_POLICY_FILE: ${{ inputs.policy-file }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_MIN_GRADE: ${{ inputs.min-grade }}
+        INPUT_FAIL_ON_MISSING_CSP: ${{ inputs.fail-on-missing-csp }}
+        INPUT_BYPASS: ${{ inputs.bypass }}
+        INPUT_REPORT_ONLY: ${{ inputs.report-only }}
+        INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
+      run: |
+        set -uo pipefail
+
+        # Exactly one source of the policy must be provided.
+        sources=0
+        [ -n "$INPUT_URL" ] && sources=$((sources + 1))
+        [ -n "$INPUT_POLICY" ] && sources=$((sources + 1))
+        [ -n "$INPUT_POLICY_FILE" ] && sources=$((sources + 1))
+        if [ "$sources" -ne 1 ]; then
+          echo "::error::Provide exactly one of 'url', 'policy', or 'policy-file' (got $sources)."
+          exit 1
+        fi
+
+        args=()
+        if [ -n "$INPUT_URL" ]; then
+          args=(fetch "$INPUT_URL" --analyze)
+          [ "$INPUT_BYPASS" = "true" ] && args+=(--bypass)
+          [ "$INPUT_FAIL_ON_MISSING_CSP" = "true" ] && args+=(--fail-on-missing-csp)
+        elif [ -n "$INPUT_POLICY" ]; then
+          args=(analyze "$INPUT_POLICY")
+          [ "$INPUT_REPORT_ONLY" = "true" ] && args+=(--report-only)
+        else
+          args=(analyze --file "$INPUT_POLICY_FILE")
+          [ "$INPUT_REPORT_ONLY" = "true" ] && args+=(--report-only)
+        fi
+
+        args+=(--format sarif --output "$INPUT_SARIF_FILE")
+        [ -n "$INPUT_FAIL_ON" ] && args+=(--fail-on "$INPUT_FAIL_ON")
+        [ -n "$INPUT_MIN_GRADE" ] && args+=(--min-grade "$INPUT_MIN_GRADE")
+
+        csp-toolkit "${args[@]}"
+        status=$?
+
+        # Exit 3 is a gate failure (findings above threshold); anything else non-zero is a real error.
+        if [ "$status" -eq 0 ]; then
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+        elif [ "$status" -eq 3 ]; then
+          echo "passed=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "::error::csp-toolkit exited with status $status"
+          exit "$status"
+        fi
+
+        # Guarantee the SARIF file exists so the upload step never fails on a missing path.
+        if [ ! -s "$INPUT_SARIF_FILE" ]; then
+          echo "::warning::No SARIF output produced; writing an empty report."
+          printf '%s' '{"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[]}' > "$INPUT_SARIF_FILE"
+        fi
+
+    - name: Upload SARIF to code scanning
+      if: ${{ inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+        category: csp-toolkit
+
+    - name: Report gate result
+      shell: bash
+      run: |
+        if [ "${{ steps.analyze.outputs.passed }}" = "true" ]; then
+          echo "### CSP Toolkit: passed :white_check_mark:" >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "### CSP Toolkit: failed :x:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "One or more CSP policy gates failed. See the job log for the offending findings." >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::CSP policy gate failed."
+          exit 1
+        fi

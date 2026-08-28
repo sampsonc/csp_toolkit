@@ -5,6 +5,17 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-28
+
+### Added
+
+- **CI policy gating:** `analyze` and `fetch` accept `--fail-on <severity>` (fail when any finding is at or above `critical`/`high`/`medium`/`low`/`info`, or `none` to disable) and `--min-grade <grade>` (fail when the policy grades below `A+`…`F`). A violated gate exits **3** — deliberately distinct from `1` (runtime error) and `2` (Click usage error) so CI can tell a policy regression apart from a broken invocation. Without a gate flag both commands still always exit `0`.
+- **`fetch --fail-on-missing-csp`:** fail when a URL serves no CSP header at all.
+- **`--output <file>`:** `analyze` and `fetch` can write `json`/`json-v1`/`sarif` output to a file instead of stdout, so machine output stays clean while gate messages go to stderr. On `fetch`, findings from every URL and policy are pooled into a single report.
+- **GitHub Action:** a composite `action.yml` wrapping the above — analyze a `url`, `policy`, or `policy-file`, gate the build on `fail-on`/`min-grade`, and upload SARIF to GitHub code scanning. Exposes `passed` and `sarif-file` outputs. Report-Only policies are reported but never gated.
+- **Action self-test workflow:** `.github/workflows/action-test.yml` exercises the action end to end (passing policy, failing policy, policy file, ambiguous input) against the local checkout via `version: local`.
+- **Tests:** 25 new CLI tests covering severity threshold ordering, grade comparison, exit-code separation, file output, and gating over mocked live responses.
+
 ## [0.7.2] - 2026-05-07
 
 ### Fixed

@@ -1,0 +1,99 @@
+name: Action Self-Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "action.yml"
+      - "src/csp_toolkit/cli.py"
+      - ".github/workflows/action-test.yml"
+  pull_request:
+    paths:
+      - "action.yml"
+      - "src/csp_toolkit/cli.py"
+      - ".github/workflows/action-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  passing-policy:
+    name: Strict policy passes the gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - id: csp
+        uses: ./
+        with:
+          policy: >-
+            default-src 'none'; script-src 'nonce-abc' 'strict-dynamic';
+            style-src 'nonce-abc'; img-src 'self'; font-src 'self';
+            connect-src 'self'; base-uri 'none'; form-action 'self';
+            frame-ancestors 'none'; object-src 'none'
+          fail-on: high
+          min-grade: A
+          version: local
+          upload-sarif: false
+      - name: Assert the gate passed
+        run: |
+          test "${{ steps.csp.outputs.passed }}" = "true"
+          test -s csp-toolkit.sarif
+          python -c "import json;d=json.load(open('csp-toolkit.sarif'));assert d['version']=='2.1.0'"
+
+  failing-policy:
+    name: Weak policy trips the gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - id: csp
+        continue-on-error: true
+        uses: ./
+        with:
+          policy: "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+          fail-on: high
+          version: local
+          upload-sarif: false
+      - name: Assert the gate failed and SARIF was still written
+        run: |
+          if [ "${{ steps.csp.outcome }}" != "failure" ]; then
+            echo "Expected the action to fail on a weak policy, got '${{ steps.csp.outcome }}'"
+            exit 1
+          fi
+          test -s csp-toolkit.sarif
+          python -c "import json;d=json.load(open('csp-toolkit.sarif'));assert len(d['runs'][0]['results'])>0"
+
+  policy-file:
+    name: Policy read from a file
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: echo "script-src 'self' 'unsafe-inline'" > policy.txt
+      - id: csp
+        uses: ./
+        with:
+          policy-file: policy.txt
+          fail-on: none
+          version: local
+          upload-sarif: false
+          sarif-file: from-file.sarif
+      - name: Assert findings were reported without failing
+        run: |
+          test "${{ steps.csp.outputs.passed }}" = "true"
+          python -c "import json;d=json.load(open('from-file.sarif'));assert len(d['runs'][0]['results'])>0"
+
+  bad-input:
+    name: Ambiguous input is rejected
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - id: csp
+        continue-on-error: true
+        uses: ./
+        with:
+          policy: "default-src 'self'"
+          url: "https://example.com"
+          version: local
+          upload-sarif: false
+      - name: Assert the action refused both inputs at once
+        run: test "${{ steps.csp.outcome }}" = "failure"
