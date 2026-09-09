@@ -4,6 +4,8 @@ Parse, analyze, generate, and find bypasses in Content Security Policy headers.
 
 A Python library and CLI tool for security researchers and bug bounty hunters. Auto-generate CSPs by crawling a website, analyze policies with 21 weakness checks, find bypasses against a database of 79 domains (66 JSONP + 13 CDNs), score policies A+ to F, diff policies, detect nonce reuse, and more.
 
+Background on why I built it and how the checks were chosen: [csp-toolkit: CSP Header Analysis at Scale](https://chs.us/2026/03/csp-toolkit/).
+
 ## Install
 
 ```bash
@@ -389,7 +391,7 @@ result = csp_toolkit.fetch_csp("https://example.com")
 
 ## GitHub Action
 
-Gate pull requests on CSP quality and publish findings to GitHub code scanning.
+Gate pull requests on CSP quality and publish findings to GitHub code scanning. Writeup on the exit-code design and how to roll a gate out without breaking every build on day one: [Fail the build when your CSP regresses](https://chs.us/2026/08/csp-ci-gating/).
 
 ```yaml
 name: CSP Check
@@ -500,3 +502,7 @@ uv run pytest --cov=csp_toolkit --cov-fail-under=75 -q
 uv run ruff check src/ tests/
 uv run ruff format --check src/ tests/
 ```
+
+## Author
+
+Built by Carl Sampson. More application security writing at [chs.us](https://chs.us/).

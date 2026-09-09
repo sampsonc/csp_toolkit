@@ -1,6 +1,6 @@
 # GitHub Action
 
-Gate pull requests on CSP quality and publish findings to GitHub code scanning.
+Gate pull requests on CSP quality and publish findings to GitHub code scanning. Writeup on the exit-code design and how to roll a gate out without breaking every build on day one: [Fail the build when your CSP regresses](https://chs.us/2026/08/csp-ci-gating/).
 
 ```yaml
 name: CSP Check
