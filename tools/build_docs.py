@@ -61,6 +61,9 @@ Auto-generate CSPs by crawling a website, analyze policies with 21 weakness
 checks, find bypasses against a database of 79 domains (66 JSONP + 13 CDNs),
 score policies A+ to F, diff policies, detect nonce reuse, and more.
 
+Background on why I built it and how the checks were chosen:
+[csp-toolkit: CSP Header Analysis at Scale](https://chs.us/2026/03/csp-toolkit/).
+
 [![PyPI](https://img.shields.io/pypi/v/csp-toolkit)](https://pypi.org/project/csp-toolkit/)
 [![License](https://img.shields.io/pypi/l/csp-toolkit)](https://github.com/sampsonc/csp_toolkit/blob/main/LICENSE)
 
@@ -96,6 +99,11 @@ csp-toolkit analyze --fail-on high --min-grade B -f policy.txt
     Use active probes (`fetch`, `scan`, `header-inject`, `nonce-check`,
     `bypass --check-live`, and similar) only against systems you are
     **authorized** to test.
+
+---
+
+Built by Carl Sampson. More application security writing at
+[chs.us](https://chs.us/).
 """
 
 
