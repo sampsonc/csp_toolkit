@@ -57,7 +57,7 @@ INDEX = """# csp-toolkit
 Parse, analyze, generate, and find bypasses in Content Security Policy headers.
 
 A Python library and CLI tool for security researchers and bug bounty hunters.
-Auto-generate CSPs by crawling a website, analyze policies with 21 weakness
+Auto-generate CSPs by crawling a website, analyze policies with 23 weakness
 checks, find bypasses against a database of 79 domains (66 JSONP + 13 CDNs),
 score policies A+ to F, diff policies, detect nonce reuse, and more.
 

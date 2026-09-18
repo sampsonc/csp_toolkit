@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-09-18
+
+### Fixed
+
+- **`<meta>`-delivered policies no longer get credit for directives browsers ignore.** `parse_meta` documented that `report-uri`, `frame-ancestors`, and `sandbox` are ignored in a `<meta http-equiv>` policy, but parsed them anyway. A site serving `<meta ... content="frame-ancestors 'none'">` therefore suppressed the "Missing frame-ancestors" finding and scored as protected against clickjacking that the browser never enforced. Those directives are now dropped from the parsed policy, and the names are recorded on `Policy.ignored_directives`. Because this removes a false negative, affected meta-delivered policies will score lower than on 0.8.1 — the new grade is the accurate one.
+
+### Added
+
+- **Check: missing `worker-src` inheriting a broader `child-src`** (MEDIUM). Workers fall back `worker-src` → `child-src` → `script-src` → `default-src`. When `child-src` is present and allows hosts or schemes that `script-src` does not, worker code loads from origins the `script-src` was written to exclude — e.g. `script-src 'nonce-x' 'strict-dynamic'; child-src https://cdn.example`. Brings the analyzer to **23 checks**.
+- **Check: meta-delivered policy specifies ignored directives** (MEDIUM). Names the directives that were discarded so the gap is reported rather than silently dropped.
+- **`Policy.delivery`** (`"header"` or `"meta"`) and **`Policy.ignored_directives`**, so callers can distinguish a header policy from a meta one. Both default to header-equivalent values, so existing constructions are unaffected.
+- **Tests:** 14 new tests covering the meta-restriction fix, the clickjacking-regression case, and the `worker-src` fallback chain (including negatives where the finding must not fire). 317 tests total.
+
 ## [0.8.1] - 2026-08-28
 
 ### Fixed

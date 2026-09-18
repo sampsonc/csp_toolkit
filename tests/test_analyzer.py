@@ -2,7 +2,7 @@
 
 from csp_toolkit.analyzer import analyze, analyze_header, score_policy
 from csp_toolkit.models import Severity
-from csp_toolkit.parser import parse
+from csp_toolkit.parser import parse, parse_meta
 
 
 class TestAnalyzeCleanPolicy:
@@ -346,3 +346,59 @@ class TestSortOrder:
         }
         values = [severity_order[s] for s in severities]
         assert values == sorted(values)
+
+
+class TestWorkerSrcFallback:
+    """worker-src falls back worker-src -> child-src -> script-src -> default-src."""
+
+    def test_flags_child_src_looser_than_script_src(self):
+        p = parse("script-src 'nonce-abc' 'strict-dynamic'; child-src https://cdn.evil.example")
+        findings = [f for f in analyze(p) if f.directive == "worker-src"]
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.MEDIUM
+        assert "cdn.evil.example" in findings[0].description
+
+    def test_flags_wildcard_child_src(self):
+        p = parse("script-src 'self'; child-src *")
+        assert [f for f in analyze(p) if f.directive == "worker-src"]
+
+    def test_explicit_worker_src_suppresses_finding(self):
+        p = parse("script-src 'nonce-abc'; child-src https://cdn.example; worker-src 'self'")
+        assert [f for f in analyze(p) if f.directive == "worker-src"] == []
+
+    def test_no_child_src_falls_through_without_finding(self):
+        # With no child-src, workers inherit script-src itself — nothing widened.
+        p = parse("script-src 'self'")
+        assert [f for f in analyze(p) if f.directive == "worker-src"] == []
+
+    def test_child_src_narrower_than_script_src_not_flagged(self):
+        p = parse("script-src 'self' https://cdn.example; child-src 'self'")
+        assert [f for f in analyze(p) if f.directive == "worker-src"] == []
+
+    def test_child_src_without_any_script_src_not_flagged(self):
+        # Nothing to compare against; the missing-script-src check covers this policy.
+        p = parse("child-src https://cdn.example")
+        assert [f for f in analyze(p) if f.directive == "worker-src"] == []
+
+    def test_child_src_matching_script_src_not_flagged(self):
+        p = parse("script-src 'self' https://cdn.example; child-src https://cdn.example")
+        assert [f for f in analyze(p) if f.directive == "worker-src"] == []
+
+
+class TestMetaIgnoredDirectives:
+    def test_flags_frame_ancestors_in_meta_policy(self):
+        p = parse_meta("default-src 'self'; frame-ancestors 'none'")
+        titles = [f.title for f in analyze(p)]
+        assert any("Meta-delivered policy specifies ignored directive" in t for t in titles)
+
+    def test_meta_policy_no_longer_credited_for_frame_ancestors(self):
+        """Regression: frame-ancestors in a meta tag must not suppress the clickjacking check."""
+        p = parse_meta("default-src 'self'; frame-ancestors 'none'")
+        titles = [f.title for f in analyze(p)]
+        assert any("Missing frame-ancestors" in t for t in titles)
+
+    def test_header_policy_not_flagged(self):
+        p = parse("default-src 'self'; frame-ancestors 'none'")
+        titles = [f.title for f in analyze(p)]
+        assert not any("Meta-delivered" in t for t in titles)
+        assert not any("Missing frame-ancestors" in t for t in titles)

@@ -33,6 +33,8 @@ def analyze(policy: Policy) -> list[Finding]:
         _check_data_uri_in_non_script,
         _check_missing_trusted_types,
         _check_missing_navigate_to,
+        _check_worker_src_fallback,
+        _check_meta_ignored_directives,
     ]
 
     findings: list[Finding] = []
@@ -556,3 +558,83 @@ def _check_missing_navigate_to(policy: Policy) -> list[Finding]:
             )
         ]
     return []
+
+
+#: worker-src fallback chain per CSP Level 3, in order of precedence.
+_WORKER_SRC_FALLBACK_CHAIN = ("child-src", "script-src", "default-src")
+
+
+def _check_worker_src_fallback(policy: Policy) -> list[Finding]:
+    """Missing worker-src inherits a broader source list than script-src allows.
+
+    Workers fall back worker-src -> child-src -> script-src -> default-src. When
+    child-src is present and looser than script-src, worker code can be loaded
+    from origins the script-src was written to exclude.
+    """
+    if policy.has_directive("worker-src"):
+        return []
+
+    inherited_from = next(
+        (name for name in _WORKER_SRC_FALLBACK_CHAIN if policy.has_directive(name)),
+        None,
+    )
+    # Nothing to inherit from at all is already reported by the missing-script-src check.
+    if inherited_from is None or inherited_from != "child-src":
+        return []
+
+    child_src = policy.get_directive("child-src")
+    script_src = policy.effective_directive("script-src")
+    if child_src is None or script_src is None:
+        return []
+
+    script_allowed = {s.raw.lower() for s in script_src.sources}
+    # Nonces and hashes cannot be satisfied by a worker script URL, so a
+    # nonce-based script-src is strictly narrower than any host/scheme list.
+    extra = [
+        s
+        for s in child_src.sources
+        if s.source_type in (SourceType.HOST, SourceType.SCHEME, SourceType.WILDCARD)
+        and s.raw.lower() not in script_allowed
+    ]
+    if not extra:
+        return []
+
+    sources = ", ".join(f"'{s.raw}'" if not s.raw.startswith("'") else s.raw for s in extra)
+    return [
+        Finding(
+            severity=Severity.MEDIUM,
+            title="Missing worker-src — workers inherit broader child-src sources",
+            description=(
+                "worker-src is absent, so Workers, SharedWorkers, and ServiceWorkers "
+                f"fall back to child-src, which allows {sources} that script-src does "
+                "not. An attacker who can inject a worker URL executes script from "
+                "those origins, bypassing the tighter script-src. Set worker-src "
+                "explicitly (e.g. \"worker-src 'self'\")."
+            ),
+            directive="worker-src",
+            references=["https://www.w3.org/TR/CSP3/#directive-worker-src"],
+        )
+    ]
+
+
+def _check_meta_ignored_directives(policy: Policy) -> list[Finding]:
+    """Directives specified in a <meta> policy that the browser ignores outright."""
+    if not policy.ignored_directives:
+        return []
+
+    names = ", ".join(policy.ignored_directives)
+    return [
+        Finding(
+            severity=Severity.MEDIUM,
+            title=f"Meta-delivered policy specifies ignored directive(s): {names}",
+            description=(
+                f"This policy was delivered via <meta http-equiv>, where {names} "
+                "is ignored by the browser. The protection it appears to provide is "
+                "not in effect and has been excluded from this analysis. Move the "
+                "policy to a Content-Security-Policy response header to enforce it."
+            ),
+            references=[
+                "https://www.w3.org/TR/CSP3/#meta-element",
+            ],
+        )
+    ]

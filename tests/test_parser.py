@@ -115,3 +115,26 @@ class TestParseMeta:
         p = parse_meta("default-src 'self'; script-src 'nonce-abc'")
         assert p.report_only is False
         assert len(p.directives) == 2
+
+    def test_marks_delivery_as_meta(self):
+        p = parse_meta("default-src 'self'")
+        assert p.delivery == "meta"
+        assert p.ignored_directives == ()
+
+    def test_drops_directives_the_browser_ignores_in_meta(self):
+        p = parse_meta("default-src 'self'; frame-ancestors 'none'; sandbox; report-uri /csp")
+        assert sorted(p.directives) == ["default-src"]
+        assert p.ignored_directives == ("frame-ancestors", "report-uri", "sandbox")
+
+    def test_keeps_enforceable_directives_alongside_ignored_ones(self):
+        p = parse_meta("script-src 'self'; frame-ancestors 'none'; img-src *")
+        assert sorted(p.directives) == ["img-src", "script-src"]
+        assert p.ignored_directives == ("frame-ancestors",)
+
+    def test_header_parse_is_unaffected(self):
+        p = parse("default-src 'self'; frame-ancestors 'none'; sandbox; report-uri /csp")
+        assert "frame-ancestors" in p.directives
+        assert "sandbox" in p.directives
+        assert "report-uri" in p.directives
+        assert p.delivery == "header"
+        assert p.ignored_directives == ()

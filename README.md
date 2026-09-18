@@ -2,7 +2,7 @@
 
 Parse, analyze, generate, and find bypasses in Content Security Policy headers.
 
-A Python library and CLI tool for security researchers and bug bounty hunters. Auto-generate CSPs by crawling a website, analyze policies with 21 weakness checks, find bypasses against a database of 79 domains (66 JSONP + 13 CDNs), score policies A+ to F, diff policies, detect nonce reuse, and more.
+A Python library and CLI tool for security researchers and bug bounty hunters. Auto-generate CSPs by crawling a website, analyze policies with 23 weakness checks, find bypasses against a database of 79 domains (66 JSONP + 13 CDNs), score policies A+ to F, diff policies, detect nonce reuse, and more.
 
 Background on why I built it and how the checks were chosen: [csp-toolkit: CSP Header Analysis at Scale](https://chs.us/2026/03/csp-toolkit/).
 
@@ -355,7 +355,7 @@ csp = csp_toolkit.CSPBuilder.strict(nonce="abc123").build()
 result = csp_toolkit.fetch_csp("https://example.com")
 ```
 
-## Analyzer Checks (21)
+## Analyzer Checks (23)
 
 | Severity | Check |
 |----------|-------|
@@ -375,6 +375,8 @@ result = csp_toolkit.fetch_csp("https://example.com")
 | MEDIUM | `unsafe-hashes` in script-src |
 | MEDIUM | `unsafe-inline` + nonce/hash (CSP2 downgrade) |
 | MEDIUM | `data:` in object-src/frame-src/child-src |
+| MEDIUM | Missing worker-src inheriting a broader child-src |
+| MEDIUM | Meta-delivered policy specifying ignored directives |
 | LOW | `unsafe-inline` in style-src |
 | LOW | `http:` scheme sources |
 | LOW | IP address sources |

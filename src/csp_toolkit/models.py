@@ -160,6 +160,11 @@ class Policy:
     raw: str
     directives: dict[str, Directive] = field(default_factory=dict)
     report_only: bool = False
+    #: How the policy reached the page: "header" or "meta".
+    delivery: str = "header"
+    #: Directive names present in the raw policy but discarded as unenforceable
+    #: for this delivery method (see parser.META_IGNORED_DIRECTIVES).
+    ignored_directives: tuple[str, ...] = ()
 
     def get_directive(self, name: str) -> Directive | None:
         return self.directives.get(name.lower())

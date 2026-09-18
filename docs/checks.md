@@ -1,4 +1,4 @@
-# Analyzer Checks (21)
+# Analyzer Checks (23)
 
 | Severity | Check |
 |----------|-------|
@@ -18,6 +18,8 @@
 | MEDIUM | `unsafe-hashes` in script-src |
 | MEDIUM | `unsafe-inline` + nonce/hash (CSP2 downgrade) |
 | MEDIUM | `data:` in object-src/frame-src/child-src |
+| MEDIUM | Missing worker-src inheriting a broader child-src |
+| MEDIUM | Meta-delivered policy specifying ignored directives |
 | LOW | `unsafe-inline` in style-src |
 | LOW | `http:` scheme sources |
 | LOW | IP address sources |

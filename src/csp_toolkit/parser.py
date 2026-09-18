@@ -40,10 +40,35 @@ def parse(header: str, report_only: bool = False) -> Policy:
     return Policy(raw=header, directives=directives, report_only=report_only)
 
 
+#: Directives the UA ignores when a policy is delivered via <meta http-equiv>.
+META_IGNORED_DIRECTIVES = frozenset({"report-uri", "frame-ancestors", "sandbox"})
+
+
 def parse_meta(content: str) -> Policy:
     """Parse CSP from a <meta http-equiv="Content-Security-Policy"> content attribute.
 
     Meta-element CSP has restrictions: report-uri, frame-ancestors, and sandbox
-    directives are ignored when delivered via meta element.
+    are ignored when delivered via meta element, so they are dropped from the
+    returned policy rather than credited. The names that were present but
+    discarded are recorded on ``Policy.ignored_directives`` so callers can
+    report the gap instead of silently losing it.
     """
-    return parse(content, report_only=False)
+    policy = parse(content, report_only=False)
+
+    ignored = sorted(n for n in policy.directives if n in META_IGNORED_DIRECTIVES)
+    if not ignored:
+        return Policy(
+            raw=policy.raw,
+            directives=policy.directives,
+            report_only=False,
+            delivery="meta",
+        )
+
+    kept = {n: d for n, d in policy.directives.items() if n not in META_IGNORED_DIRECTIVES}
+    return Policy(
+        raw=policy.raw,
+        directives=kept,
+        report_only=False,
+        delivery="meta",
+        ignored_directives=tuple(ignored),
+    )
