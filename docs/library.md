@@ -16,6 +16,24 @@ bypasses = csp_toolkit.find_bypasses(policy)
 for b in bypasses:
     print(b)  # [HIGH] JSONP bypass via maps.googleapis.com (in script-src)
 
+# Resolve what actually governs each resource type
+for r in csp_toolkit.explain_policy(policy):
+    print(r.resource, r.governed_by, r.status)  # workers child-src inherited
+
+# Emit a tightened policy, with the risk of each change
+result = csp_toolkit.harden_policy(policy, level="safe")
+print(result.hardened)
+for change in result.changes:
+    print(change, change.risk)   # - script-src: 'unsafe-inline' none
+for change in result.skipped:
+    print("held back:", change, change.rationale)
+
+# Compare against a recorded baseline
+baseline = csp_toolkit.Baseline(targets={"policy": csp_toolkit.entry_for_policy(old_policy)})
+comparison = csp_toolkit.compare_to_baseline(policy, baseline, "policy")
+print(comparison.new_findings)   # regressions only
+print(comparison.resolved)       # findings that were fixed
+
 # Diff two policies
 diff = csp_toolkit.diff_headers(old_csp, new_csp)
 print(diff.weakened)       # Directives that got weaker

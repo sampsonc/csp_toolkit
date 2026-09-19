@@ -1,6 +1,73 @@
 # Generation and repair
 
-Commands that produce or fix a policy.
+Commands that explain, produce, or fix a policy.
+
+## `explain` — Show which directive actually governs each resource type
+
+```bash
+csp-toolkit explain "script-src 'nonce-a' 'strict-dynamic'; child-src https://cdn.example"
+
+# Only the resource types that inherit from a fallback — where the surprises are
+csp-toolkit explain -f policy.txt --inherited-only
+
+# One resource type, by directive or friendly name
+csp-toolkit explain -f policy.txt --resource worker-src
+csp-toolkit explain -f policy.txt --resource workers
+
+csp-toolkit explain -f policy.txt -o json
+```
+
+Resolves every resource type through its real CSP Level 3 fallback chain and labels each one
+`explicit`, `inherited`, or `unrestricted`. This is how you catch a policy that looks strict
+because `script-src` is strict while workers inherit a much looser `child-src`:
+
+```
+Resource   Governed by             Status      Effective sources
+workers    worker-src → child-src  inherited   https://cdn.example
+frames     frame-src → child-src   inherited   https://cdn.example
+scripts    script-src              explicit    'nonce-a' 'strict-dynamic'
+```
+
+Most fetch directives fall back to `default-src`, but not all of them do it directly —
+`worker-src` goes through `child-src` then `script-src`, and `frame-src` through `child-src`.
+Non-fetch directives (`frame-ancestors`, `form-action`, `base-uri`) do not fall back at all, so
+their absence means unrestricted.
+
+## `harden` — Emit a tightened version of a policy
+
+```bash
+# Safe by default: skips anything that can break a page
+csp-toolkit harden -f policy.txt
+
+# Just the policy, for piping into a config file
+csp-toolkit harden -f policy.txt -o header > policy.hardened.txt
+
+# Attempt the breaking changes too
+csp-toolkit harden -f policy.txt --level strict --allow-breaking
+
+csp-toolkit harden -f policy.txt -o json
+```
+
+Every change is labelled with its risk, and nothing is applied silently:
+
+| Risk | Meaning |
+|------|---------|
+| `none` | A no-op for modern browsers — e.g. dropping `'unsafe-inline'` that a nonce already causes CSP2+ browsers to ignore |
+| `low` | Rarely breaks a page, and the breakage is obvious if it does — adding `object-src 'none'`, upgrading `http:` to `https:` |
+| `high` | Removes capability the page may rely on; requires `--allow-breaking` |
+
+`--level safe` (the default) applies `none` and `low` changes: it removes inert keywords, adds the
+directives that have no `default-src` fallback (`object-src`, `base-uri`, `form-action`), and pins
+`worker-src` when workers would otherwise inherit a looser `child-src`. `--level strict` also
+attempts the `high`-risk changes — removing `'unsafe-eval'`, script wildcards and `data:`/`blob:`
+script sources, adding `frame-ancestors 'none'` and `require-trusted-types-for 'script'` — and
+still needs `--allow-breaking` to apply them.
+
+Hardening is idempotent and never lowers a policy's score. Two deliberate limits: it will not strip
+`'unsafe-inline'` from `script-src` unless a nonce or hash is already present (use `auto` to
+generate hashes for a real page first), and it leaves wildcards in non-script directives alone,
+because it cannot know which origins your framing or images legitimately need. Those keep showing
+up in `analyze` output.
 
 ## `auto` — Auto-generate a CSP from a live website
 

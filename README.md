@@ -2,7 +2,7 @@
 
 Parse, analyze, generate, and find bypasses in Content Security Policy headers.
 
-A Python library and CLI tool for security researchers and bug bounty hunters. Auto-generate CSPs by crawling a website, analyze policies with 23 weakness checks, find bypasses against a database of 79 domains (66 JSONP + 13 CDNs), score policies A+ to F, diff policies, detect nonce reuse, and more.
+A Python library and CLI tool for security researchers and bug bounty hunters. Auto-generate CSPs by crawling a website, analyze policies with 23 weakness checks, find bypasses against a database of 79 domains (66 JSONP + 13 CDNs), score policies A+ to F, emit a hardened policy, ratchet CI gates against a baseline, diff policies, detect nonce reuse, and more.
 
 Background on why I built it and how the checks were chosen: [csp-toolkit: CSP Header Analysis at Scale](https://chs.us/2026/03/csp-toolkit/).
 
@@ -47,6 +47,38 @@ Outputs a severity-sorted findings table and an A+ to F grade with numeric score
 **Exit codes:** `0` success, `1` runtime error, `2` usage error, `3` a `--fail-on` or `--min-grade`
 gate was violated. The distinct gate code lets CI tell a policy regression apart from a broken
 invocation. Without a gate flag the command always exits `0`.
+
+#### Baseline ratcheting
+
+`--fail-on` and `--min-grade` are absolute: a policy that already grades D fails on day one and
+keeps failing, so the check gets removed. A baseline records what the policy looks like *today* and
+gates only on findings that are not in it — so the gate is adoptable at any starting quality while
+remediation proceeds on its own schedule.
+
+```bash
+# Record the current state once, then commit the file
+csp-toolkit analyze -f policy.txt --baseline .csp-baseline.json --update-baseline
+
+# Later runs: exit 3 only on findings the baseline does not already contain
+csp-toolkit analyze -f policy.txt --baseline .csp-baseline.json
+
+# Narrow the ratchet: only NEW critical/high findings fail the build
+csp-toolkit analyze -f policy.txt --baseline .csp-baseline.json --fail-on high
+```
+
+With a baseline, `--fail-on` filters *which new findings count* rather than gating on the policy's
+total state — a pre-existing HIGH does not fail the build, a newly introduced one does.
+`--min-grade` stays absolute, because a grade floor is meant as a hard limit. Report-Only policies
+are still never gated.
+
+A baseline stores each finding's stable fingerprint plus its check id, severity and title, so the
+committed file is reviewable in a pull request. Fingerprints are derived from the check id,
+directive and subject — never the message text — so rewording a finding does not invalidate a
+baseline. When a finding is fixed, the run reports it as resolved and suggests re-recording to lock
+the improvement in.
+
+`fetch --baseline` works the same way and keys entries by URL, so one file can cover several
+deployed targets.
 
 ### `bypass` — Find CSP bypass vectors
 
@@ -227,6 +259,73 @@ csp-toolkit violations reports.json --csp-file policy.txt --fix-mode patch --for
 
 **Workflow with a live site:** fetch or copy the CSP first (`csp-toolkit fetch https://example.com`), save violation JSON from your browser or `report-uri` collector, then run `violations` with `--csp-file`. Inline/script violations may suggest `'unsafe-inline'`; prefer nonces or hashes where possible.
 
+### `explain` — Show which directive actually governs each resource type
+
+```bash
+csp-toolkit explain "script-src 'nonce-a' 'strict-dynamic'; child-src https://cdn.example"
+
+# Only the resource types that inherit from a fallback — where the surprises are
+csp-toolkit explain -f policy.txt --inherited-only
+
+# One resource type, by directive or friendly name
+csp-toolkit explain -f policy.txt --resource worker-src
+csp-toolkit explain -f policy.txt --resource workers
+
+csp-toolkit explain -f policy.txt -o json
+```
+
+Resolves every resource type through its real CSP Level 3 fallback chain and labels each one
+`explicit`, `inherited`, or `unrestricted`. This is how you catch a policy that looks strict
+because `script-src` is strict while workers inherit a much looser `child-src`:
+
+```
+Resource   Governed by             Status      Effective sources
+workers    worker-src → child-src  inherited   https://cdn.example
+frames     frame-src → child-src   inherited   https://cdn.example
+scripts    script-src              explicit    'nonce-a' 'strict-dynamic'
+```
+
+Most fetch directives fall back to `default-src`, but not all of them do it directly —
+`worker-src` goes through `child-src` then `script-src`, and `frame-src` through `child-src`.
+Non-fetch directives (`frame-ancestors`, `form-action`, `base-uri`) do not fall back at all, so
+their absence means unrestricted.
+
+### `harden` — Emit a tightened version of a policy
+
+```bash
+# Safe by default: skips anything that can break a page
+csp-toolkit harden -f policy.txt
+
+# Just the policy, for piping into a config file
+csp-toolkit harden -f policy.txt -o header > policy.hardened.txt
+
+# Attempt the breaking changes too
+csp-toolkit harden -f policy.txt --level strict --allow-breaking
+
+csp-toolkit harden -f policy.txt -o json
+```
+
+Every change is labelled with its risk, and nothing is applied silently:
+
+| Risk | Meaning |
+|------|---------|
+| `none` | A no-op for modern browsers — e.g. dropping `'unsafe-inline'` that a nonce already causes CSP2+ browsers to ignore |
+| `low` | Rarely breaks a page, and the breakage is obvious if it does — adding `object-src 'none'`, upgrading `http:` to `https:` |
+| `high` | Removes capability the page may rely on; requires `--allow-breaking` |
+
+`--level safe` (the default) applies `none` and `low` changes: it removes inert keywords, adds the
+directives that have no `default-src` fallback (`object-src`, `base-uri`, `form-action`), and pins
+`worker-src` when workers would otherwise inherit a looser `child-src`. `--level strict` also
+attempts the `high`-risk changes — removing `'unsafe-eval'`, script wildcards and `data:`/`blob:`
+script sources, adding `frame-ancestors 'none'` and `require-trusted-types-for 'script'` — and
+still needs `--allow-breaking` to apply them.
+
+Hardening is idempotent and never lowers a policy's score. Two deliberate limits: it will not strip
+`'unsafe-inline'` from `script-src` unless a nonce or hash is already present (use `auto` to
+generate hashes for a real page first), and it leaves wildcards in non-script directives alone,
+because it cannot know which origins your framing or images legitimately need. Those keep showing
+up in `analyze` output.
+
 ### `auto` — Auto-generate a CSP from a live website
 
 ```bash
@@ -304,6 +403,24 @@ print(f"{grade} ({score}/100), {len(findings)} findings")
 bypasses = csp_toolkit.find_bypasses(policy)
 for b in bypasses:
     print(b)  # [HIGH] JSONP bypass via maps.googleapis.com (in script-src)
+
+# Resolve what actually governs each resource type
+for r in csp_toolkit.explain_policy(policy):
+    print(r.resource, r.governed_by, r.status)  # workers child-src inherited
+
+# Emit a tightened policy, with the risk of each change
+result = csp_toolkit.harden_policy(policy, level="safe")
+print(result.hardened)
+for change in result.changes:
+    print(change, change.risk)   # - script-src: 'unsafe-inline' none
+for change in result.skipped:
+    print("held back:", change, change.rationale)
+
+# Compare against a recorded baseline
+baseline = csp_toolkit.Baseline(targets={"policy": csp_toolkit.entry_for_policy(old_policy)})
+comparison = csp_toolkit.compare_to_baseline(policy, baseline, "policy")
+print(comparison.new_findings)   # regressions only
+print(comparison.resolved)       # findings that were fixed
 
 # Diff two policies
 diff = csp_toolkit.diff_headers(old_csp, new_csp)
@@ -432,6 +549,8 @@ Analyze a policy string or file instead of a live URL:
 | `fail-on` | `high` | Fail if any finding is at or above this severity (`critical`…`info`, or `none`) |
 | `min-grade` | — | Fail if the grade is below this letter (`A+`…`F`) |
 | `fail-on-missing-csp` | `false` | With `url`, fail when no CSP header is served |
+| `baseline` | — | Gate on findings absent from this baseline file instead of the policy's absolute state |
+| `update-baseline` | `false` | Record findings to `baseline` and exit without gating |
 | `bypass` | `false` | Also run the JSONP/CDN bypass finder |
 | `report-only` | `false` | Treat `policy`/`policy-file` as a Report-Only header |
 | `upload-sarif` | `true` | Upload SARIF to code scanning (needs `security-events: write`) |
@@ -442,6 +561,28 @@ Analyze a policy string or file instead of a live URL:
 Outputs: `passed` (`true`/`false`) and `sarif-file`. Exactly one of `url`, `policy`, or
 `policy-file` must be set. Report-Only policies are never gated — they are advisory by
 definition — but their findings still appear in the SARIF report. Requires csp-toolkit >= 0.8.0.
+
+### Ratcheting in CI
+
+Gate an already-weak policy from day one without a remediation project first:
+
+```yaml
+- uses: sampsonc/csp_toolkit@v1
+  with:
+    policy-file: config/csp.txt
+    baseline: .csp-baseline.json
+    fail-on: high        # only NEW critical/high findings fail the build
+```
+
+Create the file once, locally, and commit it:
+
+```bash
+csp-toolkit analyze -f config/csp.txt --baseline .csp-baseline.json --update-baseline
+git add .csp-baseline.json
+```
+
+When a finding gets fixed, the run says so and the baseline can be re-recorded to lock the
+improvement in — which turns the file into a visible record of the policy getting better.
 
 ## Browser Extension
 

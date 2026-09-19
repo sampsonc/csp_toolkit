@@ -1,5 +1,7 @@
 """Tests for CLI commands using Click's CliRunner."""
 
+import json
+
 from click.testing import CliRunner
 
 from csp_toolkit.cli import main
@@ -382,8 +384,18 @@ class TestBugBountyCli:
             ["analyze", "-o", "json-v1", "script-src 'self'"],
         )
         assert result.exit_code == 0
-        assert '"schema_version": "1.0"' in result.output
+        assert '"schema_version": "1.1"' in result.output
         assert "csp_analyze" in result.output
+
+    def test_analyze_json_v1_ids_are_stable_across_runs(self):
+        """A json-v1 id must survive a re-run — baselines and alert dedupe key on it."""
+        args = ["analyze", "-o", "json-v1", "script-src 'self' *.googleapis.com"]
+        first = json.loads(runner.invoke(main, args).output)
+        second = json.loads(runner.invoke(main, args).output)
+        ids = [f["id"] for f in first["findings"]]
+        assert ids == [f["id"] for f in second["findings"]]
+        assert len(set(ids)) == len(ids), "ids must be unique within a report"
+        assert all(f["check_id"] for f in first["findings"])
 
     def test_bypass_sarif(self):
         result = runner.invoke(
@@ -722,3 +734,159 @@ class TestReportOnlyNeverGated:
             main, ["analyze", "--report-only", WEAK_POLICY, "--fail-on", "critical"]
         )
         assert via_fetch.exit_code == via_analyze.exit_code == 0
+
+
+class TestBaselineGating:
+    """The ratchet: exit 3 on regression against a baseline, not on absolute state."""
+
+    MEDIOCRE = "script-src 'self' 'unsafe-inline'"
+    WORSE = "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+
+    def _record(self, tmp_path, csp=None):
+        path = tmp_path / "baseline.json"
+        result = runner.invoke(
+            main,
+            ["analyze", csp or self.MEDIOCRE, "--baseline", str(path), "--update-baseline"],
+        )
+        assert result.exit_code == 0, result.output
+        assert path.exists()
+        return path
+
+    def test_update_baseline_writes_file_and_exits_zero(self, tmp_path):
+        self._record(tmp_path)
+
+    def test_update_baseline_requires_baseline_path(self):
+        result = runner.invoke(main, ["analyze", self.MEDIOCRE, "--update-baseline"])
+        assert result.exit_code == 2  # usage error, not a gate violation
+
+    def test_known_bad_policy_passes(self, tmp_path):
+        path = self._record(tmp_path)
+        result = runner.invoke(main, ["analyze", self.MEDIOCRE, "--baseline", str(path)])
+        assert result.exit_code == 0, result.output
+
+    def test_new_finding_exits_three(self, tmp_path):
+        path = self._record(tmp_path)
+        result = runner.invoke(main, ["analyze", self.WORSE, "--baseline", str(path)])
+        assert result.exit_code == 3
+
+    def test_fail_on_filters_which_regressions_gate(self, tmp_path):
+        path = self._record(tmp_path)
+        newly_low = self.MEDIOCRE + " http:"
+        assert (
+            runner.invoke(
+                main, ["analyze", newly_low, "--baseline", str(path), "--fail-on", "high"]
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main, ["analyze", newly_low, "--baseline", str(path), "--fail-on", "low"]
+            ).exit_code
+            == 3
+        )
+
+    def test_min_grade_stays_absolute_with_a_baseline(self, tmp_path):
+        path = self._record(tmp_path)
+        result = runner.invoke(
+            main, ["analyze", self.MEDIOCRE, "--baseline", str(path), "--min-grade", "B"]
+        )
+        assert result.exit_code == 3
+
+    def test_report_only_is_never_gated(self, tmp_path):
+        path = self._record(tmp_path)
+        result = runner.invoke(
+            main, ["analyze", self.WORSE, "--report-only", "--baseline", str(path)]
+        )
+        assert result.exit_code == 0
+
+    def test_improvement_passes_and_is_reported(self, tmp_path):
+        path = self._record(tmp_path)
+        result = runner.invoke(main, ["analyze", "script-src 'self'", "--baseline", str(path)])
+        assert result.exit_code == 0
+        assert "resolved" in result.output or "fixed" in result.output
+
+    def test_missing_baseline_file_is_an_error_not_a_pass(self, tmp_path):
+        result = runner.invoke(
+            main, ["analyze", self.WORSE, "--baseline", str(tmp_path / "absent.json")]
+        )
+        assert result.exit_code == 1
+        assert "not found" in result.output
+
+    def test_corrupt_baseline_file_is_an_error_not_a_pass(self, tmp_path):
+        path = tmp_path / "bad.json"
+        path.write_text("{oops")
+        result = runner.invoke(main, ["analyze", self.WORSE, "--baseline", str(path)])
+        assert result.exit_code == 1
+
+    def test_baseline_works_with_machine_output(self, tmp_path):
+        path = self._record(tmp_path)
+        result = runner.invoke(
+            main, ["analyze", self.WORSE, "--baseline", str(path), "-o", "json-v1"]
+        )
+        assert result.exit_code == 3
+        assert '"schema_version"' in result.output
+
+
+class TestFetchBaselineGating:
+    """fetch keys baselines per URL, so one file can cover several targets."""
+
+    def test_records_and_then_passes_the_same_live_policy(self, httpx_mock, tmp_path):
+        path = tmp_path / "baseline.json"
+        httpx_mock.add_response(
+            url="https://example.com",
+            headers={"content-security-policy": WEAK_POLICY},
+        )
+        rec = runner.invoke(
+            main,
+            ["fetch", "https://example.com", "--baseline", str(path), "--update-baseline"],
+        )
+        assert rec.exit_code == 0, rec.output
+        assert "https://example.com" in json.loads(path.read_text())["targets"]
+
+        httpx_mock.add_response(
+            url="https://example.com",
+            headers={"content-security-policy": WEAK_POLICY},
+        )
+        run = runner.invoke(main, ["fetch", "https://example.com", "--baseline", str(path)])
+        assert run.exit_code == 0, run.output
+
+    def test_live_regression_exits_three(self, httpx_mock, tmp_path):
+        path = tmp_path / "baseline.json"
+        httpx_mock.add_response(
+            url="https://example.com",
+            headers={"content-security-policy": "script-src 'self'"},
+        )
+        runner.invoke(
+            main,
+            ["fetch", "https://example.com", "--baseline", str(path), "--update-baseline"],
+        )
+
+        httpx_mock.add_response(
+            url="https://example.com",
+            headers={"content-security-policy": "script-src 'self' 'unsafe-inline'"},
+        )
+        run = runner.invoke(main, ["fetch", "https://example.com", "--baseline", str(path)])
+        assert run.exit_code == GATE_EXIT
+
+    def test_untracked_url_does_not_fail_the_build(self, httpx_mock, tmp_path):
+        path = tmp_path / "baseline.json"
+        httpx_mock.add_response(
+            url="https://known.example",
+            headers={"content-security-policy": "script-src 'self'"},
+        )
+        runner.invoke(
+            main,
+            ["fetch", "https://known.example", "--baseline", str(path), "--update-baseline"],
+        )
+
+        httpx_mock.add_response(
+            url="https://other.example",
+            headers={"content-security-policy": WEAK_POLICY},
+        )
+        run = runner.invoke(main, ["fetch", "https://other.example", "--baseline", str(path)])
+        assert run.exit_code == 0
+        assert "no baseline entry" in run.output
+
+    def test_update_baseline_requires_baseline_path(self):
+        result = runner.invoke(main, ["fetch", "https://example.com", "--update-baseline"])
+        assert result.exit_code == 2

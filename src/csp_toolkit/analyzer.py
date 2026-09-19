@@ -11,35 +11,12 @@ def analyze(policy: Policy) -> list[Finding]:
     if not policy.directives:
         return []
 
-    checks = [
-        _check_missing_script_src_and_default_src,
-        _check_unsafe_inline_script,
-        _check_data_uri_script,
-        _check_unsafe_eval_script,
-        _check_wildcard_source,
-        _check_blob_uri_script,
-        _check_missing_object_src,
-        _check_missing_base_uri,
-        _check_missing_form_action,
-        _check_missing_frame_ancestors,
-        _check_overly_broad_hosts,
-        _check_unsafe_hashes,
-        _check_unsafe_inline_style,
-        _check_strict_dynamic_without_nonce_hash,
-        _check_https_scheme_script,
-        _check_report_only,
-        _check_http_sources,
-        _check_ip_address_sources,
-        _check_data_uri_in_non_script,
-        _check_missing_trusted_types,
-        _check_missing_navigate_to,
-        _check_worker_src_fallback,
-        _check_meta_ignored_directives,
-    ]
-
     findings: list[Finding] = []
-    for check in checks:
-        findings.extend(check(policy))
+    for check_id, check in CHECKS:
+        for finding in check(policy):
+            if finding.check_id is None:
+                finding.check_id = check_id
+            findings.append(finding)
 
     severity_order = {
         Severity.CRITICAL: 0,
@@ -353,6 +330,7 @@ def _check_overly_broad_hosts(policy: Policy) -> list[Finding]:
                             f"attacker-controllable content. Use the bypass finder for specifics."
                         ),
                         directive=name,
+                        subject=source.raw,
                         bypass_type="broad_domain",
                     )
                 )
@@ -473,6 +451,7 @@ def _check_ip_address_sources(policy: Policy) -> list[Finding]:
                             "or exploitable."
                         ),
                         directive=name,
+                        subject=source.raw,
                     )
                 )
     return findings
@@ -560,26 +539,21 @@ def _check_missing_navigate_to(policy: Policy) -> list[Finding]:
     return []
 
 
-#: worker-src fallback chain per CSP Level 3, in order of precedence.
-_WORKER_SRC_FALLBACK_CHAIN = ("child-src", "script-src", "default-src")
-
-
 def _check_worker_src_fallback(policy: Policy) -> list[Finding]:
     """Missing worker-src inherits a broader source list than script-src allows.
 
-    Workers fall back worker-src -> child-src -> script-src -> default-src. When
-    child-src is present and looser than script-src, worker code can be loaded
-    from origins the script-src was written to exclude.
+    Workers fall back worker-src -> child-src -> script-src -> default-src (see
+    models.FALLBACK_CHAINS). When child-src is present and looser than script-src,
+    worker code can be loaded from origins the script-src was written to exclude.
     """
     if policy.has_directive("worker-src"):
         return []
 
-    inherited_from = next(
-        (name for name in _WORKER_SRC_FALLBACK_CHAIN if policy.has_directive(name)),
-        None,
-    )
-    # Nothing to inherit from at all is already reported by the missing-script-src check.
-    if inherited_from is None or inherited_from != "child-src":
+    _, inherited_from = policy.resolve("worker-src")
+    # Only child-src widens things; inheriting script-src or default-src directly
+    # cannot be looser than script-src, and having nothing at all is already
+    # reported by the missing-script-src check.
+    if inherited_from != "child-src":
         return []
 
     child_src = policy.get_directive("child-src")
@@ -638,3 +612,34 @@ def _check_meta_ignored_directives(policy: Policy) -> list[Finding]:
             ],
         )
     ]
+
+
+#: The analyzer's checks, paired with the stable ids that appear in json-v1
+#: output, SARIF rule ids, and stored baselines. Ids are part of the output
+#: contract: rename a check function freely, but changing an id here breaks
+#: every baseline in the wild.
+CHECKS: tuple[tuple[str, object], ...] = (
+    ("no-script-src", _check_missing_script_src_and_default_src),
+    ("unsafe-inline-script", _check_unsafe_inline_script),
+    ("data-uri-script", _check_data_uri_script),
+    ("unsafe-eval", _check_unsafe_eval_script),
+    ("wildcard-source", _check_wildcard_source),
+    ("blob-uri-script", _check_blob_uri_script),
+    ("object-src", _check_missing_object_src),
+    ("missing-base-uri", _check_missing_base_uri),
+    ("missing-form-action", _check_missing_form_action),
+    ("missing-frame-ancestors", _check_missing_frame_ancestors),
+    ("broad-host", _check_overly_broad_hosts),
+    ("unsafe-hashes", _check_unsafe_hashes),
+    ("unsafe-inline-style", _check_unsafe_inline_style),
+    ("strict-dynamic-without-nonce", _check_strict_dynamic_without_nonce_hash),
+    ("https-scheme-script", _check_https_scheme_script),
+    ("report-only", _check_report_only),
+    ("http-scheme-source", _check_http_sources),
+    ("ip-address-source", _check_ip_address_sources),
+    ("data-uri-non-script", _check_data_uri_in_non_script),
+    ("missing-trusted-types", _check_missing_trusted_types),
+    ("missing-navigate-to", _check_missing_navigate_to),
+    ("missing-worker-src", _check_worker_src_fallback),
+    ("meta-ignored-directives", _check_meta_ignored_directives),
+)

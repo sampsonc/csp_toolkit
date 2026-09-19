@@ -28,6 +28,14 @@ inputs:
     description: "When analyzing a URL, fail if the response serves no CSP header at all."
     required: false
     default: "false"
+  baseline:
+    description: "Path to a baseline file. Gates on findings that are NOT in the baseline instead of on the policy's absolute state, so an already-weak policy can be gated from day one. Combine with `fail-on` to narrow which new findings fail the build. Empty disables baseline mode."
+    required: false
+    default: ""
+  update-baseline:
+    description: "Record the current findings to `baseline` and exit without gating. Run this once to create the file, then commit it."
+    required: false
+    default: "false"
   bypass:
     description: "Also run the bypass finder (JSONP and CDN gadget detection) and include its findings."
     required: false
@@ -99,6 +107,8 @@ runs:
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
         INPUT_MIN_GRADE: ${{ inputs.min-grade }}
         INPUT_FAIL_ON_MISSING_CSP: ${{ inputs.fail-on-missing-csp }}
+        INPUT_BASELINE: ${{ inputs.baseline }}
+        INPUT_UPDATE_BASELINE: ${{ inputs.update-baseline }}
         INPUT_BYPASS: ${{ inputs.bypass }}
         INPUT_REPORT_ONLY: ${{ inputs.report-only }}
         INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
@@ -128,9 +138,16 @@ runs:
           [ "$INPUT_REPORT_ONLY" = "true" ] && args+=(--report-only)
         fi
 
+        if [ "$INPUT_UPDATE_BASELINE" = "true" ] && [ -z "$INPUT_BASELINE" ]; then
+          echo "::error::'update-baseline' requires 'baseline' to be set."
+          exit 1
+        fi
+
         args+=(--format sarif --output "$INPUT_SARIF_FILE")
         [ -n "$INPUT_FAIL_ON" ] && args+=(--fail-on "$INPUT_FAIL_ON")
         [ -n "$INPUT_MIN_GRADE" ] && args+=(--min-grade "$INPUT_MIN_GRADE")
+        [ -n "$INPUT_BASELINE" ] && args+=(--baseline "$INPUT_BASELINE")
+        [ "$INPUT_UPDATE_BASELINE" = "true" ] && args+=(--update-baseline)
 
         csp-toolkit "${args[@]}"
         status=$?

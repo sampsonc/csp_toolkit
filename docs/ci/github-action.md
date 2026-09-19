@@ -39,6 +39,8 @@ Analyze a policy string or file instead of a live URL:
 | `fail-on` | `high` | Fail if any finding is at or above this severity (`critical`…`info`, or `none`) |
 | `min-grade` | — | Fail if the grade is below this letter (`A+`…`F`) |
 | `fail-on-missing-csp` | `false` | With `url`, fail when no CSP header is served |
+| `baseline` | — | Gate on findings absent from this baseline file instead of the policy's absolute state |
+| `update-baseline` | `false` | Record findings to `baseline` and exit without gating |
 | `bypass` | `false` | Also run the JSONP/CDN bypass finder |
 | `report-only` | `false` | Treat `policy`/`policy-file` as a Report-Only header |
 | `upload-sarif` | `true` | Upload SARIF to code scanning (needs `security-events: write`) |

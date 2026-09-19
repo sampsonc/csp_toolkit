@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -83,6 +84,32 @@ VALID_DIRECTIVES = frozenset(
         "block-all-mixed-content",
     }
 )
+
+#: Fallback chains per CSP Level 3, each listed most specific first. A directive
+#: absent from this map does not fall back at all (frame-ancestors, form-action,
+#: base-uri, navigate-to, sandbox, and the reporting directives).
+FALLBACK_CHAINS: dict[str, tuple[str, ...]] = {
+    "default-src": ("default-src",),
+    "script-src": ("script-src", "default-src"),
+    "script-src-elem": ("script-src-elem", "script-src", "default-src"),
+    "script-src-attr": ("script-src-attr", "script-src", "default-src"),
+    "style-src": ("style-src", "default-src"),
+    "style-src-elem": ("style-src-elem", "style-src", "default-src"),
+    "style-src-attr": ("style-src-attr", "style-src", "default-src"),
+    "img-src": ("img-src", "default-src"),
+    "font-src": ("font-src", "default-src"),
+    "connect-src": ("connect-src", "default-src"),
+    "media-src": ("media-src", "default-src"),
+    "object-src": ("object-src", "default-src"),
+    "manifest-src": ("manifest-src", "default-src"),
+    "prefetch-src": ("prefetch-src", "default-src"),
+    "child-src": ("child-src", "default-src"),
+    # frame-src and worker-src route through child-src, and worker-src through
+    # script-src after that — the chain a "worker-src is missing" bug hides in.
+    "frame-src": ("frame-src", "child-src", "default-src"),
+    "worker-src": ("worker-src", "child-src", "script-src", "default-src"),
+}
+
 
 _NONCE_RE = re.compile(r"^'nonce-[A-Za-z0-9+/=_-]+'$")
 _HASH_RE = re.compile(r"^'sha(256|384|512)-[A-Za-z0-9+/=]+'$")
@@ -169,40 +196,37 @@ class Policy:
     def get_directive(self, name: str) -> Directive | None:
         return self.directives.get(name.lower())
 
-    def effective_directive(self, name: str) -> Directive | None:
-        """Get directive with default-src fallback.
+    def fallback_chain(self, name: str) -> tuple[str, ...]:
+        """The directives a UA consults for *name*, most specific first.
 
-        Per the CSP spec, if a fetch directive is not present, the UA falls back
-        to default-src. Non-fetch directives (frame-ancestors, form-action,
-        base-uri, etc.) do NOT fall back to default-src.
+        Several directives fall back through an intermediate rather than straight
+        to default-src — worker-src goes through child-src and script-src, and
+        frame-src through child-src — which is why a tight script-src plus a loose
+        child-src still lets worker code load from the looser list.
         """
-        directive = self.get_directive(name)
-        if directive is not None:
-            return directive
+        return FALLBACK_CHAINS.get(name.lower(), ())
 
-        # Only fetch directives fall back to default-src
-        fetch_directives = {
-            "script-src",
-            "script-src-elem",
-            "script-src-attr",
-            "style-src",
-            "style-src-elem",
-            "style-src-attr",
-            "img-src",
-            "font-src",
-            "connect-src",
-            "media-src",
-            "object-src",
-            "prefetch-src",
-            "child-src",
-            "frame-src",
-            "worker-src",
-            "manifest-src",
-        }
-        if name.lower() in fetch_directives:
-            return self.get_directive("default-src")
+    def resolve(self, name: str) -> tuple[Directive | None, str | None]:
+        """Resolve *name* through its fallback chain.
 
-        return None
+        Returns the governing directive and the name it actually came from, so
+        callers can tell an explicit value from an inherited one. Returns
+        ``(None, None)`` when nothing in the chain is present.
+        """
+        for candidate in self.fallback_chain(name):
+            directive = self.get_directive(candidate)
+            if directive is not None:
+                return directive, candidate
+        return None, None
+
+    def effective_directive(self, name: str) -> Directive | None:
+        """Get the directive that governs *name*, following the real fallback chain.
+
+        Non-fetch directives (frame-ancestors, form-action, base-uri, etc.) do not
+        fall back at all, so they resolve to themselves or to nothing.
+        """
+        directive, _ = self.resolve(name)
+        return directive
 
     def effective_sources(self, directive_name: str) -> list[Source]:
         """Get the effective source list for a directive, with default-src fallback."""
@@ -218,6 +242,11 @@ class Policy:
         return "; ".join(str(d) for d in self.directives.values())
 
 
+def _slug(text: str) -> str:
+    """Fallback identity for a Finding constructed without a check_id."""
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:60]
+
+
 @dataclass
 class Finding:
     severity: Severity
@@ -226,6 +255,25 @@ class Finding:
     directive: str | None = None
     bypass_type: str | None = None
     references: list[str] = field(default_factory=list)
+    #: Stable slug for the check that produced this finding. Set by the analyzer
+    #: from its check registry; treat it as part of the public output contract,
+    #: since baselines and SARIF rule IDs are keyed on it.
+    check_id: str | None = None
+    #: The specific source or value that triggered this finding, for checks that
+    #: emit more than one finding per directive (e.g. two broad domains in
+    #: script-src). Part of the fingerprint so those stay distinguishable.
+    subject: str | None = None
+
+    @property
+    def fingerprint(self) -> str:
+        """Stable identity for this finding, for baseline comparison and SARIF dedupe.
+
+        Deliberately derived from check_id / directive / subject and *not* from the
+        title or description, so rewording a message does not invalidate a stored
+        baseline or churn a code-scanning alert.
+        """
+        parts = [self.check_id or _slug(self.title), self.directive or "", self.subject or ""]
+        return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
     def __str__(self) -> str:
         prefix = f"[{self.severity.value.upper()}]"

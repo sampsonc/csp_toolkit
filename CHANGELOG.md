@@ -5,6 +5,26 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-09-19
+
+### Added
+
+- **Baseline ratcheting for CI gates.** `analyze` and `fetch` accept `--baseline <file>` and `--update-baseline`. An absolute gate (`--fail-on high`) only works on a policy that is already good; a policy grading D fails on day one and keeps failing until someone removes the check. A baseline records the findings a policy has today, and later runs fail only on findings that are not in it — so the gate is adoptable at any starting quality while remediation proceeds separately. With a baseline, `--fail-on` narrows *which new findings* count as a regression rather than gating on the policy's total state; `--min-grade` stays absolute. Report-Only policies are still never gated. `fetch` keys entries by URL, so one file covers several deployed targets. New `baseline` input on the GitHub Action.
+- **`explain` command.** Resolves every resource type through its real CSP Level 3 fallback chain and labels each `explicit`, `inherited`, or `unrestricted`. Catches the policy that looks strict because `script-src` is strict while workers inherit a much looser `child-src`. `--resource` narrows to one type, `--inherited-only` shows just the inherited ones, and `-o json` emits the chains.
+- **`harden` command.** Emits a tightened policy from an existing one — the executable form of the remediation prose already carried on every finding. Each change is labelled by risk: `none` (a no-op for modern browsers, like dropping `'unsafe-inline'` that a nonce already neutralises), `low` (rarely breaks a page), `high` (removes capability the page may rely on, and needs `--allow-breaking`). `--level safe` is the default and never applies a `high` change; `-o header` prints just the policy for piping into config. Hardening is idempotent and never lowers a policy's score.
+- **Stable finding identity.** Every `Finding` now carries a `check_id` from the analyzer's check registry, a `subject` for checks that emit several findings per directive, and a `fingerprint` derived from those rather than from the message text — so rewording a finding does not invalidate a committed baseline or churn a code-scanning alert.
+- **Public API:** `explain_policy`, `explain_json`, `Resolution`, `harden_policy`, `harden_json`, `HardenResult`, `Change`, `Baseline`, `compare_to_baseline`, `entry_for_policy`, `Comparison`, `BaselineError`, `CHECKS`, `FALLBACK_CHAINS`.
+- **Tests:** 105 new tests (422 total), including invariants that hardening is idempotent and never lowers a score, that finding fingerprints never collide within a report, and that a reworded title cannot look like a baseline regression.
+
+### Fixed
+
+- **`Policy.effective_directive` now follows the real CSP Level 3 fallback chains.** It previously fell back from any fetch directive straight to `default-src`, skipping the intermediate hops: `worker-src` actually resolves through `child-src` then `script-src`, `frame-src` through `child-src`, and the `-elem`/`-attr` variants through their parent directive. Callers asking what governs a worker or a frame got `default-src` when a `child-src` was present and in force. The chains are now declared in `models.FALLBACK_CHAINS` and exposed through `Policy.fallback_chain()` and `Policy.resolve()`, which also reports *which* directive a value came from.
+
+### Changed
+
+- **json-v1 is now `schema_version` 1.1.** The `id` field was a fresh `uuid4` on every run, so nothing could key on it; it is now the finding's stable fingerprint. Added `check_id` and `subject` fields. Any consumer that depended on the previous `id` was already unable to match a finding across two runs, so this cannot break a working integration.
+- **SARIF `ruleId` is now the stable check id** (e.g. `unsafe-inline-script`) rather than the finding's prose title, which means rewording a message no longer creates a new GitHub code-scanning alert. Results now also carry `partialFingerprints`, and the run declares `rules` metadata with `security-severity` so alerts sort correctly in the Security tab.
+
 ## [0.8.2] - 2026-09-18
 
 ### Fixed

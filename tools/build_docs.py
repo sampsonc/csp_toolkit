@@ -36,8 +36,8 @@ PAGES: dict[str, tuple[str, list[str]]] = {
         ["`fetch`", "`scan`", "`subdomains`", "`monitor`"],
     ),
     "cli/generation.md": (
-        "# Generation and repair\n\nCommands that produce or fix a policy.",
-        ["`auto`", "`generate`", "`violations`", "`diff`"],
+        "# Generation and repair\n\nCommands that explain, produce, or fix a policy.",
+        ["`explain`", "`harden`", "`auto`", "`generate`", "`violations`", "`diff`"],
     ),
     "cli/probes.md": (
         "# Active probes\n\nTargeted security tests against a live host.\n\n"
@@ -59,7 +59,8 @@ Parse, analyze, generate, and find bypasses in Content Security Policy headers.
 A Python library and CLI tool for security researchers and bug bounty hunters.
 Auto-generate CSPs by crawling a website, analyze policies with 23 weakness
 checks, find bypasses against a database of 79 domains (66 JSONP + 13 CDNs),
-score policies A+ to F, diff policies, detect nonce reuse, and more.
+score policies A+ to F, emit a hardened policy, ratchet CI gates against a
+baseline, diff policies, detect nonce reuse, and more.
 
 Background on why I built it and how the checks were chosen:
 [csp-toolkit: CSP Header Analysis at Scale](https://chs.us/2026/03/csp-toolkit/).

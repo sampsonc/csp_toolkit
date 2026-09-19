@@ -11,13 +11,18 @@ from rich.table import Table
 from rich.text import Text
 
 from .analyzer import analyze, score_policy
+from .baseline import POLICY_KEY, Baseline, BaselineError, compare
+from .baseline import load as load_baseline
+from .baseline import update as update_baseline
 from .bypass import find_bypasses
 from .effective import combine_enforced_header_policies
+from .explain import explain_json, explain_policy
 from .export_ops import format_findings_sarif_json, format_findings_stable_json
 from .diff import diff_headers
 from .discover import discover_resources, generate_csp
 from .fetcher import FetchResult, fetch_csp
 from .generator import CSPBuilder
+from .harden import LEVELS, harden_json, harden_policy
 from .models import Policy, Severity
 from .probes import (
     NonceReuseStatus,
@@ -27,6 +32,8 @@ from .probes import (
 )
 from .tracker import check_evolution, load_history
 from .output import (
+    format_explanation,
+    format_harden_result,
     format_findings_detail,
     format_findings_json,
     format_findings_rich,
@@ -115,6 +122,9 @@ def _grade_below(grade: str, minimum: str) -> bool:
     return _GRADE_ORDER.index(grade) > _GRADE_ORDER.index(minimum)
 
 
+_SEVERITY_BY_NAME = {s.value: s for s in _SEVERITY_ORDER}
+
+
 def _apply_gate(
     findings: list,
     *,
@@ -151,6 +161,72 @@ def _apply_gate(
     return failed
 
 
+def _apply_baseline_gate(
+    policy: Policy,
+    baseline: Baseline,
+    key: str,
+    *,
+    fail_on: str | None,
+    min_grade: str | None,
+    grade: str | None,
+    label: str = "",
+) -> bool:
+    """Gate on regression against a baseline rather than an absolute threshold.
+
+    With a baseline, *fail_on* narrows which new findings count as a regression
+    instead of gating on the policy's total state — a pre-existing HIGH does not
+    fail the build, a newly introduced one does. *min_grade* stays absolute,
+    because a grade floor is meant as a hard limit.
+    """
+    prefix = f"{label}: " if label else ""
+    comparison = compare(policy, baseline, key)
+
+    if comparison.untracked:
+        click.echo(
+            f"{prefix}no baseline entry for '{key}' — "
+            f"record one with --update-baseline (not gating)",
+            err=True,
+        )
+    else:
+        summary = (
+            f"{prefix}baseline {key}: {len(comparison.new_findings)} new, "
+            f"{len(comparison.resolved)} resolved, {len(comparison.unchanged)} unchanged "
+            f"(grade {comparison.grade_before} -> {comparison.grade_after})"
+        )
+        click.echo(summary, err=True)
+
+    failed = False
+    regressions = (
+        []
+        if comparison.untracked
+        else comparison.regressions(_SEVERITY_BY_NAME.get(fail_on) if fail_on else None)
+    )
+    if regressions:
+        for f in regressions:
+            where = f" in {f.directive}" if f.directive else ""
+            click.echo(f"{prefix}  NEW [{f.severity.value}] {f.title}{where}", err=True)
+        click.echo(
+            f"{prefix}FAIL: {len(regressions)} finding(s) not present in the baseline",
+            err=True,
+        )
+        failed = True
+
+    if comparison.resolved:
+        click.echo(
+            f"{prefix}  {len(comparison.resolved)} baseline finding(s) fixed — "
+            f"re-record with --update-baseline to lock the improvement in",
+            err=True,
+        )
+
+    if min_grade and grade is not None and _grade_below(grade, min_grade):
+        click.echo(
+            f"{prefix}FAIL: grade {grade} is below the required minimum {min_grade}", err=True
+        )
+        failed = True
+
+    return failed
+
+
 def _gate_policy(
     policy: Policy,
     findings: list,
@@ -159,6 +235,8 @@ def _gate_policy(
     min_grade: str | None,
     grade: str | None,
     label: str = "",
+    baseline: Baseline | None = None,
+    baseline_key: str = POLICY_KEY,
 ) -> bool:
     """Apply gates to one policy, skipping Report-Only.
 
@@ -167,11 +245,62 @@ def _gate_policy(
     build. Findings are still reported.
     """
     if policy.report_only:
-        if fail_on or min_grade:
+        if fail_on or min_grade or baseline is not None:
             prefix = f"{label}: " if label else ""
             click.echo(f"{prefix}skipping gate for Report-Only policy", err=True)
         return False
+    if baseline is not None:
+        return _apply_baseline_gate(
+            policy,
+            baseline,
+            baseline_key,
+            fail_on=fail_on,
+            min_grade=min_grade,
+            grade=grade,
+            label=label,
+        )
     return _apply_gate(findings, fail_on=fail_on, min_grade=min_grade, grade=grade, label=label)
+
+
+def _baseline_key(url: str, policy_index: int) -> str:
+    """Baseline key for one policy on one URL.
+
+    A page can serve several enforced policies, so anything past the first is
+    suffixed. The first keeps the bare URL, which keeps the common
+    single-policy case readable in a committed baseline.
+    """
+    return url if policy_index == 0 else f"{url}#{policy_index + 1}"
+
+
+def _resolve_baseline(
+    baseline_path: str | None,
+    update: bool,
+    *,
+    targets: dict[str, Policy],
+) -> Baseline | None:
+    """Load a baseline for comparison, or write one and signal that we are done.
+
+    Returns None when there is nothing to compare against — either no baseline was
+    requested, or it was just (re)written by --update-baseline.
+    """
+    if update and not baseline_path:
+        raise click.UsageError("--update-baseline requires --baseline <file>")
+    if not baseline_path:
+        return None
+
+    if update:
+        for key, policy in targets.items():
+            if policy.report_only:
+                click.echo(f"skipping Report-Only policy for baseline key '{key}'", err=True)
+                continue
+            update_baseline(baseline_path, key, policy)
+            click.echo(f"recorded baseline for '{key}' in {baseline_path}", err=True)
+        return None
+
+    try:
+        return load_baseline(baseline_path)
+    except BaselineError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 def _write_output(text: str, output_path: str | None) -> None:
@@ -255,6 +384,19 @@ def main():
     default=None,
     help="Write json/json-v1/sarif output to this file instead of stdout",
 )
+@click.option(
+    "--baseline",
+    "baseline_path",
+    type=click.Path(dir_okay=False),
+    default=None,
+    help="Gate on regression against this baseline file instead of an absolute threshold",
+)
+@click.option(
+    "--update-baseline",
+    "update_baseline_flag",
+    is_flag=True,
+    help="Record the current findings to --baseline and exit without gating",
+)
 def analyze_cmd(
     csp: str | None,
     file_path: str | None,
@@ -263,6 +405,8 @@ def analyze_cmd(
     fail_on: str | None,
     min_grade: str | None,
     output_path: str | None,
+    baseline_path: str | None,
+    update_baseline_flag: bool,
 ):
     """Analyze a CSP header for weaknesses."""
     raw = _read_csp_input(csp, file_path)
@@ -271,9 +415,20 @@ def analyze_cmd(
     findings = analyze(policy)
     grade, score = score_policy(policy)
 
+    baseline = _resolve_baseline(baseline_path, update_baseline_flag, targets={POLICY_KEY: policy})
+    if update_baseline_flag:
+        return
+
     if fmt in ("json-v1", "sarif"):
         _output_findings(findings, fmt, stable_json_tool="csp_analyze", output_path=output_path)
-        if _gate_policy(policy, findings, fail_on=fail_on, min_grade=min_grade, grade=grade):
+        if _gate_policy(
+            policy,
+            findings,
+            fail_on=fail_on,
+            min_grade=min_grade,
+            grade=grade,
+            baseline=baseline,
+        ):
             sys.exit(GATE_EXIT_CODE)
         return
 
@@ -294,7 +449,14 @@ def analyze_cmd(
             parts = [f"{v} {k}" for k, v in counts.items()]
             console.print(f"[bold]Total: {len(findings)} findings[/bold] ({', '.join(parts)})")
 
-    if _gate_policy(policy, findings, fail_on=fail_on, min_grade=min_grade, grade=grade):
+    if _gate_policy(
+        policy,
+        findings,
+        fail_on=fail_on,
+        min_grade=min_grade,
+        grade=grade,
+        baseline=baseline,
+    ):
         sys.exit(GATE_EXIT_CODE)
 
 
@@ -346,6 +508,19 @@ def analyze_cmd(
     default=None,
     help="Write json/json-v1/sarif findings to this file instead of stdout",
 )
+@click.option(
+    "--baseline",
+    "baseline_path",
+    type=click.Path(dir_okay=False),
+    default=None,
+    help="Gate each URL on regression against this baseline file (implies --analyze)",
+)
+@click.option(
+    "--update-baseline",
+    "update_baseline_flag",
+    is_flag=True,
+    help="Record each URL's current findings to --baseline and exit without gating",
+)
 def fetch(
     urls: tuple[str, ...],
     do_analyze: bool,
@@ -359,12 +534,26 @@ def fetch(
     min_grade: str | None,
     fail_on_missing_csp: bool,
     output_path: str | None,
+    baseline_path: str | None,
+    update_baseline_flag: bool,
 ):
     """Fetch and display CSP headers from one or more URLs."""
-    gating = fail_on is not None or min_grade is not None
-    if gating:
+    if update_baseline_flag and not baseline_path:
+        raise click.UsageError("--update-baseline requires --baseline <file>")
+
+    baseline = None
+    if baseline_path and not update_baseline_flag:
+        try:
+            baseline = load_baseline(baseline_path)
+        except BaselineError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+    gating = fail_on is not None or min_grade is not None or baseline is not None
+    if gating or update_baseline_flag:
         do_analyze = True
 
+    # Policies to record, keyed by target, when --update-baseline is in play.
+    to_record: dict[str, Policy] = {}
     gate_failed = False
     # Findings are pooled across URLs/policies so a single --output file covers the whole run.
     collected: list = []
@@ -412,13 +601,18 @@ def fetch(
                 if fmt not in ("json", "json-v1", "sarif"):
                     format_grade(grade, score, console)
 
-                if gating and _gate_policy(
+                target_key = _baseline_key(result.url, i)
+                if update_baseline_flag:
+                    to_record[target_key] = policy
+                elif gating and _gate_policy(
                     policy,
                     findings,
                     fail_on=fail_on,
                     min_grade=min_grade,
                     grade=grade,
                     label=f"{url} (policy #{i + 1})",
+                    baseline=baseline,
+                    baseline_key=target_key,
                 ):
                     gate_failed = True
 
@@ -436,8 +630,130 @@ def fetch(
     if output_path:
         _output_findings(collected, fmt, stable_json_tool="csp_analyze", output_path=output_path)
 
+    if update_baseline_flag:
+        for key, policy in to_record.items():
+            if policy.report_only:
+                click.echo(f"skipping Report-Only policy for baseline key '{key}'", err=True)
+                continue
+            update_baseline(baseline_path, key, policy)
+            click.echo(f"recorded baseline for '{key}' in {baseline_path}", err=True)
+        return
+
     if gate_failed:
         sys.exit(GATE_EXIT_CODE)
+
+
+@main.command("explain")
+@click.argument("csp", required=False)
+@click.option("--file", "-f", "file_path", help="Read CSP from file (use - for stdin)")
+@click.option("--format", "-o", "fmt", type=click.Choice(["table", "json"]), default="table")
+@click.option("--report-only", is_flag=True, help="Treat as Report-Only header")
+@click.option(
+    "--resource",
+    default=None,
+    help="Explain only this resource type or directive (e.g. worker-src, workers)",
+)
+@click.option(
+    "--inherited-only",
+    is_flag=True,
+    help="Show only resource types that inherit from a fallback, where surprises live",
+)
+def explain_cmd(
+    csp: str | None,
+    file_path: str | None,
+    fmt: str,
+    report_only: bool,
+    resource: str | None,
+    inherited_only: bool,
+):
+    """Show which directive actually governs each resource type.
+
+    A policy can look strict because script-src is strict, while workers inherit a
+    far looser child-src. This resolves each resource type through its real CSP3
+    fallback chain so inherited values are visible.
+    """
+    raw = _read_csp_input(csp, file_path)
+    policy = parse(raw, report_only=report_only)
+
+    if fmt == "json":
+        doc = explain_json(policy)
+        if resource:
+            wanted = resource.lower()
+            doc["resources"] = [
+                r
+                for r in doc["resources"]
+                if wanted in (r["resource"].lower(), r["directive"].lower())
+            ]
+        if inherited_only:
+            doc["resources"] = [r for r in doc["resources"] if r["status"] == "inherited"]
+        click.echo(json.dumps(doc, indent=2))
+        return
+
+    resolutions = explain_policy(policy)
+    if resource:
+        wanted = resource.lower()
+        resolutions = [
+            r for r in resolutions if wanted in (r.resource.lower(), r.directive.lower())
+        ]
+        if not resolutions:
+            raise click.ClickException(f"unknown resource type or directive: {resource!r}")
+    if inherited_only:
+        resolutions = [r for r in resolutions if r.is_inherited]
+
+    console.print()
+    format_explanation(policy, resolutions, console)
+
+
+@main.command("harden")
+@click.argument("csp", required=False)
+@click.option("--file", "-f", "file_path", help="Read CSP from file (use - for stdin)")
+@click.option(
+    "--level",
+    type=click.Choice(sorted(LEVELS)),
+    default="safe",
+    help="How far to tighten: 'safe' skips changes that can break a page, 'strict' attempts them",
+)
+@click.option(
+    "--allow-breaking",
+    is_flag=True,
+    help="Apply changes that remove capability the page may rely on (required by --level strict)",
+)
+@click.option(
+    "--format",
+    "-o",
+    "fmt",
+    type=click.Choice(["table", "header", "json"]),
+    default="table",
+    help="'header' prints only the hardened policy, for piping into a config file",
+)
+@click.option("--report-only", is_flag=True, help="Treat as Report-Only header")
+def harden_cmd(
+    csp: str | None,
+    file_path: str | None,
+    level: str,
+    allow_breaking: bool,
+    fmt: str,
+    report_only: bool,
+):
+    """Emit a tightened version of a CSP, with the risk of each change.
+
+    Every change is labelled: 'none' is a no-op for modern browsers, 'low' rarely
+    breaks a page, and 'high' removes capability the page may depend on and needs
+    --allow-breaking. Nothing is applied silently.
+    """
+    raw = _read_csp_input(csp, file_path)
+    policy = parse(raw, report_only=report_only)
+    result = harden_policy(policy, level=level, allow_breaking=allow_breaking)
+
+    if fmt == "header":
+        click.echo(result.hardened)
+        return
+    if fmt == "json":
+        click.echo(json.dumps(harden_json(result), indent=2))
+        return
+
+    console.print()
+    format_harden_result(result, console)
 
 
 @main.command("bypass")

@@ -155,3 +155,103 @@ def format_security_headers(headers: dict[str, str], console: Console | None = N
         table.add_row(name, value)
 
     console.print(table)
+
+
+#: Colors for a resolution's provenance — inherited values are the ones worth
+#: noticing, so they get the warning color rather than the neutral one.
+_STATUS_COLORS = {
+    "explicit": "green",
+    "inherited": "yellow",
+    "unrestricted": "red",
+}
+
+
+def format_explanation(policy: Policy, resolutions: list, console: Console | None = None) -> None:
+    """Print which directive governs each resource type."""
+    if console is None:
+        console = Console()
+
+    title = "Effective Policy by Resource Type"
+    if policy.report_only:
+        title += " (Report-Only — nothing is enforced)"
+    elif policy.delivery == "meta":
+        title += " (delivered via <meta>)"
+
+    table = Table(title=title)
+    table.add_column("Resource", style="bold")
+    table.add_column("Governed by")
+    table.add_column("Status")
+    table.add_column("Effective sources")
+
+    for r in resolutions:
+        color = _STATUS_COLORS.get(r.status, "white")
+        if r.is_unrestricted:
+            governed = f"{r.directive} → —"
+        elif r.is_inherited:
+            governed = f"{r.directive} → {r.governed_by}"
+        else:
+            governed = r.directive
+        table.add_row(
+            r.resource,
+            governed,
+            f"[{color}]{r.status}[/{color}]",
+            r.rendered_sources,
+        )
+
+    console.print(table)
+
+    if policy.ignored_directives:
+        names = ", ".join(policy.ignored_directives)
+        console.print(
+            f"\n[yellow]Ignored in a <meta> policy:[/yellow] {names} "
+            "— specified but not enforced by the browser."
+        )
+
+    unrestricted = [r.resource for r in resolutions if r.is_unrestricted]
+    if unrestricted:
+        console.print(
+            f"\n[red]Unrestricted:[/red] {', '.join(unrestricted)} "
+            "— no directive in the fallback chain covers these."
+        )
+
+
+#: Risk colors for harden changes — "high" means it can break the page.
+_RISK_COLORS = {"none": "green", "low": "cyan", "high": "red"}
+
+
+def format_harden_result(result, console: Console | None = None) -> None:
+    """Print a hardened policy alongside what changed and what it risks."""
+    if console is None:
+        console = Console()
+
+    if not result.changed:
+        console.print("[green]Nothing to harden at this level.[/green]")
+    else:
+        console.print("[bold]Hardened policy:[/bold]")
+        console.print(f"[green]{result.hardened}[/green]")
+
+    if result.changes:
+        table = Table(title="Applied")
+        table.add_column("Change", style="bold")
+        table.add_column("Risk")
+        table.add_column("Why")
+        for c in result.changes:
+            color = _RISK_COLORS.get(c.risk, "white")
+            table.add_row(str(c), f"[{color}]{c.risk}[/{color}]", c.rationale)
+        console.print()
+        console.print(table)
+
+    if result.skipped:
+        table = Table(title="Held back")
+        table.add_column("Change", style="bold")
+        table.add_column("Risk")
+        table.add_column("Why it was not applied")
+        for c in result.skipped:
+            color = _RISK_COLORS.get(c.risk, "white")
+            table.add_row(str(c), f"[{color}]{c.risk}[/{color}]", c.rationale)
+        console.print()
+        console.print(table)
+        console.print(
+            "\n[dim]Re-run with --level strict --allow-breaking to apply these, "
+            "after checking what the page relies on.[/dim]"
+        )

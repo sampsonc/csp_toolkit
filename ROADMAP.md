@@ -21,8 +21,9 @@ Details: [CHANGELOG.md](CHANGELOG.md) (0.6.0).
 | **0.7.2** | CI hardening | Version test reads `__version__` from package metadata so patch releases no longer break CI. |
 | **0.8.0** | GitHub Actions / CI integration | `--fail-on` / `--min-grade` exit-code gating (exit 3) and `--output` for `analyze` / `fetch`; `fetch --fail-on-missing-csp`; composite `action.yml` with SARIF upload to code scanning. |
 | **0.8.2** | Delivery-aware parsing & worker-src | `parse_meta` drops `report-uri` / `frame-ancestors` / `sandbox` (ignored in `<meta>`) instead of crediting them; `Policy.delivery` / `Policy.ignored_directives`; two new checks (missing `worker-src` inheriting a broader `child-src`; meta-ignored directives) bring the analyzer to 23. |
+| **0.9.0** | Ratcheting, explanation, and repair | `--baseline` / `--update-baseline` regression gating for `analyze` / `fetch` plus a `baseline` Action input; `explain` resolves real CSP3 fallback chains; `harden` emits a tightened policy with per-change risk labels; stable finding fingerprints (json-v1 1.1, SARIF `ruleId` = check id); `effective_directive` fixed to follow the real fallback chains. |
 
-Details: [CHANGELOG.md](CHANGELOG.md) (0.7.0–0.8.2).
+Details: [CHANGELOG.md](CHANGELOG.md) (0.7.0–0.9.0).
 
 ## Planned — Future Releases
 

@@ -1,15 +1,28 @@
 """CSP Toolkit — Parse, analyze, generate, and find bypasses in Content Security Policy headers."""
 
 from ._version import __version__
-from .analyzer import analyze, analyze_header, score_policy
+from .analyzer import CHECKS, analyze, analyze_header, score_policy
+from .baseline import Baseline, BaselineError, Comparison
+from .baseline import compare as compare_to_baseline
+from .baseline import entry_for_policy
 from .bypass import check_domain_gadgets, check_domain_jsonp, find_bypasses, probe_jsonp_endpoint
 from .diff import PolicyDiff, diff_headers, diff_policies
 from .discover import DiscoveredResources, discover_resources, generate_csp
 from .effective import combine_enforced_header_policies, combine_policies
+from .explain import Resolution, explain_json, explain_policy
 from .export_ops import format_findings_sarif_json, format_findings_stable_json
 from .fetcher import FetchResult, fetch_csp
 from .generator import CSPBuilder
-from .models import Directive, Finding, Policy, Severity, Source, SourceType
+from .harden import Change, HardenResult, harden_json, harden_policy
+from .models import (
+    FALLBACK_CHAINS,
+    Directive,
+    Finding,
+    Policy,
+    Severity,
+    Source,
+    SourceType,
+)
 from .parser import parse, parse_meta
 from .probes import (
     HeaderInjectionResult,
@@ -36,50 +49,64 @@ __all__ = [
     "analyze",
     "analyze_header",
     "analyze_report_uri",
+    "Baseline",
+    "BaselineError",
     "build_patched_csp",
+    "Change",
     "check_domain_gadgets",
     "check_domain_jsonp",
     "check_evolution",
     "check_header_injection",
     "check_subdomains",
+    "CHECKS",
     "combine_enforced_header_policies",
     "combine_policies",
+    "compare_to_baseline",
+    "Comparison",
     "CSPBuilder",
     "detect_nonce_reuse",
     "diff_headers",
     "diff_policies",
     "Directive",
-    "DiscoveredResources",
     "discover_resources",
+    "DiscoveredResources",
+    "entry_for_policy",
     "EvolutionAlert",
+    "explain_json",
+    "explain_policy",
+    "FALLBACK_CHAINS",
     "fetch_csp",
     "FetchResult",
     "find_bypasses",
+    "Finding",
     "format_findings_sarif_json",
     "format_findings_stable_json",
-    "Finding",
     "generate_csp",
     "group_violations",
+    "harden_json",
+    "harden_policy",
+    "HardenResult",
     "HeaderInjectionResult",
     "NonceReuseResult",
     "NonceReuseStatus",
     "parse",
     "parse_meta",
     "parse_violations_json",
-    "probe_jsonp_endpoint",
     "Policy",
     "PolicyDiff",
+    "probe_jsonp_endpoint",
     "ReportUriResult",
+    "Resolution",
     "scan_url",
     "scan_urls",
     "ScanResult",
     "score_policy",
     "Severity",
-    "suggest_violation_fixes",
     "Snapshot",
     "Source",
     "SourceType",
     "SubdomainResult",
+    "suggest_violation_fixes",
     "take_snapshot",
     "violations_summary_json",
 ]

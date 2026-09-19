@@ -402,3 +402,41 @@ class TestMetaIgnoredDirectives:
         titles = [f.title for f in analyze(p)]
         assert not any("Meta-delivered" in t for t in titles)
         assert not any("Missing frame-ancestors" in t for t in titles)
+
+
+class TestCheckRegistry:
+    """The check ids are part of the output contract — baselines and SARIF key on them."""
+
+    def test_ids_are_unique(self):
+        from csp_toolkit.analyzer import CHECKS
+
+        ids = [cid for cid, _ in CHECKS]
+        assert len(set(ids)) == len(ids)
+
+    def test_ids_are_slug_shaped(self):
+        import re
+
+        from csp_toolkit.analyzer import CHECKS
+
+        for cid, _ in CHECKS:
+            assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", cid), cid
+
+    def test_every_finding_carries_a_check_id(self):
+        messy = (
+            "default-src *; script-src 'unsafe-inline' 'unsafe-eval' data: blob: http: "
+            "https: *.googleapis.com 10.0.0.1 'unsafe-hashes'; style-src 'unsafe-inline'; "
+            "child-src data: *; object-src data:"
+        )
+        findings = analyze(parse(messy))
+        assert findings
+        assert all(f.check_id for f in findings)
+
+    def test_fingerprints_are_unique_within_one_report(self):
+        """A collision would make two findings indistinguishable to a baseline."""
+        messy = (
+            "script-src 'self' *.googleapis.com *.cloudfront.net 10.0.0.1 192.168.1.1 http:; "
+            "img-src http: 172.16.0.1; child-src data:; object-src data:"
+        )
+        findings = analyze(parse(messy))
+        fingerprints = [f.fingerprint for f in findings]
+        assert len(set(fingerprints)) == len(fingerprints)
